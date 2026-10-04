@@ -95,7 +95,7 @@
   "runs_dir": "runs",
   "qth_dir": "qth",
   "lrp_dir": "lrp",
-  "geometry_qt": "AdnQywADAAAAAAAA////+QAABm0AAANtAAAAQgAAABkAAAYdAAADbAAAAAACAAAABm4AAAAAAAAAFwAABm0AAANt",
+  "geometry_qt": "AdnQywADAAAAAAAAAAAAAAAACcUAAAPrAAAAAgAAAAIAAAnDAAAD6QAAAAAAAAAAAyAAAAACAAAAAgAACcMAAAPp",
   "srtm_url": "https://s3.amazonaws.com/elevation-tiles-prod/skadi/{lat_dir}/{tile}.hgt.gz",
   "overlay": {
     "source": "osm",
@@ -105,7 +105,7 @@
     "display_mode": "image",
     "relief_source": "srtm",
     "relief_opacity": 50,
-    "coverage_blur": 10,
+    "coverage_blur": 3,
     "crop": false,
     "aspect": true,
     "layers": [],

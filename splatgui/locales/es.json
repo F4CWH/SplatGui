@@ -475,7 +475,7 @@
  "Tuiles SRTM téléchargées (terrain/srtm)": "Teselas SRTM descargadas (terrain/srtm)",
  "Adresse, commune, lieu-dit, sommet…": "Dirección, municipio, paraje, cumbre…",
  "Rechercher": "Buscar",
- "Clic : placer le point — glisser : se déplacer — molette : zoomer": "Clic: colocar el punto — arrastrar: desplazarse — rueda: zoom",
+ "Clic : placer le point — glisser : se déplacer — molette ou + / − : zoomer": "Clic: colocar el punto — arrastrar: desplazarse — rueda o + / −: zoom",
  "Fond :": "Mapa base:",
  "Longitude (Est +)": "Longitud (Este +)",
  "(aucun résultat)": "(ningún resultado)",
@@ -620,5 +620,10 @@
  "Ils sont distribués dans l'espoir qu'ils seront utiles, mais SANS AUCUNE GARANTIE, sans même la garantie implicite de qualité marchande ou d'adéquation à un usage particulier. Voir Aide → Licence (GNU GPL v2).": "Se distribuyen con la esperanza de que sean útiles, pero SIN NINGUNA GARANTÍA, ni siquiera la garantía implícita de COMERCIABILIDAD o IDONEIDAD PARA UN FIN DETERMINADO. Véase Ayuda → Licencia (GNU GPL v2).",
  "SPLAT! et Splat!Gui : GNU GPL version 2 ou (à votre choix) toute version ultérieure.": "SPLAT! y Splat!Gui: GNU GPL versión 2 o (a su elección) cualquier versión posterior.",
  "Texte de la licence introuvable : https://www.gnu.org/licenses/old-licenses/gpl-2.0.html": "Texto de la licencia no encontrado: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
- "Code source :": "Código fuente:"
+ "Code source :": "Código fuente:",
+ "Niveau de zoom : {zoom}": "Nivel de zoom: {zoom}",
+ "Recentrer sur le point choisi": "Centrar en el punto elegido",
+ "Ajuster à la fenêtre": "Ajustar a la ventana",
+ "Zoom avant (+)": "Acercar (+)",
+ "Zoom arrière (−)": "Alejar (−)"
 }
