@@ -1,0 +1,133 @@
+{
+  "last_profile": "Défaut",
+  "last_params": {
+    "arch": "x64",
+    "variant": "standard",
+    "mode": "p2p",
+    "metric": true,
+    "rx_height": 10.0,
+    "tx_sites": [
+      {
+        "name": "TX1",
+        "lat": 0.0,
+        "lon": 0.0,
+        "height": 10.0,
+        "height_unit": "m",
+        "antenna": "",
+        "azimuth": 0.0,
+        "tilt": 0.0
+      }
+    ],
+    "rx_site": {
+      "name": "RX1",
+      "lat": 0.0,
+      "lon": 0.0,
+      "height": 10.0,
+      "height_unit": "m"
+    },
+    "lrp": {
+      "enabled": true,
+      "dielectric": 15.0,
+      "conductivity": 0.005,
+      "bending": 301.0,
+      "frequency": 435.0,
+      "frac_situations": 0.5,
+      "frac_time": 0.9,
+      "erp": 5.0,
+      "climate": 6,
+      "polarization": 1
+    },
+    "values": {
+      "m": "",
+      "R": "",
+      "f": "",
+      "fz": "",
+      "gc": "",
+      "erp": "",
+      "db": ""
+    },
+    "flags": {
+      "n": false,
+      "N": false,
+      "sc": false,
+      "nf": false,
+      "ngs": false,
+      "kml": false,
+      "geo": false,
+      "dbm": false,
+      "olditm": false,
+      "gpsav": false
+    },
+    "map_enabled": true,
+    "map_name": "carte",
+    "map_aspect_file": true,
+    "map_aspect_format": "ppm",
+    "graphs": {
+      "p": false,
+      "e": false,
+      "h": false,
+      "H": false,
+      "l": false
+    },
+    "graph_format": "png",
+    "sdf_dir": "",
+    "auto_terrain": true,
+    "city_files": [],
+    "boundary_files": [],
+    "udt": "",
+    "ani": "",
+    "ano": "",
+    "log": true,
+    "extra_args": "",
+    "erp_calc": {
+      "power": 10.0,
+      "cable": "",
+      "attenuation": 10.0,
+      "length": 10.0,
+      "extra_loss": 0.5,
+      "gain": 2.15
+    }
+  },
+  "extra_paths": {
+    "x64": "",
+    "x86": ""
+  },
+  "runs_dir": "runs",
+  "geometry_qt": "AdnQywADAAAAAAAA////+QAABm0AAANtAAAAQgAAABkAAAYdAAADbAAAAAACAAAABm4AAAAAAAAAFwAABm0AAANt",
+  "srtm_url": "https://s3.amazonaws.com/elevation-tiles-prod/skadi/{lat_dir}/{tile}.hgt.gz",
+  "overlay": {
+    "source": "osm",
+    "basemap_opacity": 50,
+    "coverage_opacity": 50,
+    "coverage_visible": true,
+    "display_mode": "image",
+    "relief_source": "srtm",
+    "relief_opacity": 50,
+    "coverage_blur": 10,
+    "crop": false,
+    "aspect": true,
+    "layers": [],
+    "layer_colors": {},
+    "labels": false,
+    "layer_opacity": 100,
+    "sun_azimuth": 315,
+    "sun_altitude": 35,
+    "exaggeration": 5,
+    "site_icons": true,
+    "tx_icon": "antenne_rouge.png",
+    "rx_icon": "antenne.png",
+    "icon_size": 16,
+    "site_names": true,
+    "hide_marks": true,
+    "frame_ratio": 1.3333333333333333,
+    "frame_width_km": 0.0,
+    "legend": true,
+    "legend_scale": 0.5,
+    "scale": true
+  },
+  "picker": {
+    "source": "osm",
+    "zoom": 17
+  },
+  "prereqs_offered": true
+}
