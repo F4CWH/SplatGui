@@ -93,6 +93,8 @@
     "x86": ""
   },
   "runs_dir": "runs",
+  "qth_dir": "qth",
+  "lrp_dir": "lrp",
   "geometry_qt": "AdnQywADAAAAAAAA////+QAABm0AAANtAAAAQgAAABkAAAYdAAADbAAAAAACAAAABm4AAAAAAAAAFwAABm0AAANt",
   "srtm_url": "https://s3.amazonaws.com/elevation-tiles-prod/skadi/{lat_dir}/{tile}.hgt.gz",
   "overlay": {
