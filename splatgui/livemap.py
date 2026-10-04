@@ -82,7 +82,6 @@ class LiveMap(SlippyMap):
     """Carte interactive : fond en ligne + relief + couverture SPLAT! + sites + légende."""
 
     hoveredText = pyqtSignal(str)
-    zoomChanged = pyqtSignal(int)
     statusText = pyqtSignal(str)
 
     def __init__(self, parent=None):
@@ -298,12 +297,6 @@ class LiveMap(SlippyMap):
                     continue
                 painter.drawImage(rect.topLeft(), sprite)
 
-    def wheelEvent(self, event):
-        before = self.zoom
-        super().wheelEvent(event)
-        if self.zoom != before:
-            self.zoomChanged.emit(self.zoom)
-
     def fit(self, ref):
         """Cadre la vue sur l'emprise `ref` (zoom le plus grand qui la contient)."""
         west, south, east, north = ref.bounds()
@@ -314,6 +307,7 @@ class LiveMap(SlippyMap):
                 break
         self.zoom = zoom
         self.cx, self.cy = (x0 + x1) / 2, (y0 + y1) / 2
+        self._sync_controls()
         self.update()
 
     def mouseReleaseEvent(self, event):

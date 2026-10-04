@@ -2,13 +2,83 @@
 
 from pathlib import Path
 
-from PyQt6.QtCore import QPoint, QPointF, Qt, pyqtSignal
-from PyQt6.QtGui import QImage, QPainter, QPixmap
+from PyQt6.QtCore import QEvent, QPoint, QPointF, Qt, pyqtSignal
+from PyQt6.QtGui import QFontMetrics, QImage, QPainter, QPixmap
 from PyQt6.QtWidgets import (
-    QFileDialog, QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, QHBoxLayout,
-    QLineEdit, QListWidget, QPushButton, QVBoxLayout, QWidget,
+    QFileDialog, QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, QHBoxLayout, QLabel,
+    QLineEdit, QListWidget, QPushButton, QSlider, QToolButton, QVBoxLayout, QWidget,
 )
 from .i18n import N_, tr
+
+
+def graduate(slider, tick, page=None):
+    """Gradue un curseur : repères tous les `tick`, flèches au pas de 1, Page ↑/↓ d'un repère."""
+    slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+    slider.setTickInterval(tick)
+    slider.setSingleStep(1)
+    slider.setPageStep(page or tick)
+    return slider
+
+
+class SliderValue(QLabel):
+    """Valeur d'un curseur affichée à côté de lui (largeur fixe : la mise en page ne bouge pas)."""
+
+    def __init__(self, slider, fmt="{} %", scale=1, parent=None):
+        super().__init__(parent)
+        self._fmt, self._scale = fmt, scale
+        widest = max((fmt.format(v / scale if scale != 1 else v) for v in (slider.minimum(), slider.maximum())),
+                     key=len)
+        self.setMinimumWidth(QFontMetrics(self.font()).horizontalAdvance(widest) + 4)
+        self.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        slider.valueChanged.connect(self._show)
+        self._show(slider.value())
+
+    def _show(self, value):
+        self.setText(self._fmt.format(value / self._scale if self._scale != 1 else value))
+
+
+class ZoomControls(QWidget):
+    """Boutons + / − / recentrer posés sur une carte (coin haut-droit, replacé par `place`)."""
+
+    zoomIn = pyqtSignal()
+    zoomOut = pyqtSignal()
+    home = pyqtSignal()
+
+    STYLE = ("QToolButton { background: rgba(255, 255, 255, 225); color: #202020; border: 1px solid #8a8a8a;"
+             " border-radius: 4px; font-size: 16px; font-weight: bold; }"
+             "QToolButton:hover { background: #ffffff; border-color: #404040; }"
+             "QToolButton:pressed { background: #dcdcdc; }"
+             "QToolButton:disabled { color: #b0b0b0; }")
+
+    def __init__(self, parent, home_tip=N_("Recentrer")):
+        super().__init__(parent)
+        self.setStyleSheet(self.STYLE)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+        self.buttons = {}
+        for key, text, tip, signal in (("in", "+", N_("Zoom avant (+)"), self.zoomIn),
+                                       ("out", "−", N_("Zoom arrière (−)"), self.zoomOut),
+                                       ("home", "⌖", home_tip, self.home)):
+            button = QToolButton()
+            button.setText(text)
+            button.setToolTip(tr(tip))
+            button.setFixedSize(30, 30)
+            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setAutoRepeat(key != "home")
+            button.clicked.connect(signal)
+            layout.addWidget(button)
+            self.buttons[key] = button
+        self.adjustSize()
+
+    def set_limits(self, can_zoom_in, can_zoom_out):
+        self.buttons["in"].setEnabled(can_zoom_in)
+        self.buttons["out"].setEnabled(can_zoom_out)
+
+    def place(self, width, margin=10):
+        self.move(width - self.width() - margin, margin)
+        self.raise_()
 
 
 class ImageView(QGraphicsView):
@@ -28,6 +98,10 @@ class ImageView(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         self._fit = True
+        self.controls = ZoomControls(self, N_("Ajuster à la fenêtre"))
+        self.controls.zoomIn.connect(lambda: self.zoom(1.25, centered=True))
+        self.controls.zoomOut.connect(lambda: self.zoom(0.8, centered=True))
+        self.controls.home.connect(self.fit)
 
     def load(self, path):
         image = QImage(str(path))
@@ -63,12 +137,31 @@ class ImageView(QGraphicsView):
         self.resetTransform()
         self.zoomChanged.emit(1.0)
 
-    def zoom(self, factor):
+    def zoom(self, factor, centered=False):
+        """Zoom autour du point sous la souris (molette) ou du centre de la vue (boutons)."""
         self._fit = False
         current = self.transform().m11()
         if 0.02 < current * factor < 40:
+            if centered:
+                self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
             self.scale(factor, factor)
+            self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.zoomChanged.emit(self.transform().m11())
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
+            self.zoom(1.25, centered=True)
+        elif event.key() == Qt.Key.Key_Minus:
+            self.zoom(0.8, centered=True)
+        else:
+            super().keyPressEvent(event)
+
+    def viewportEvent(self, event):
+        # Le viewport change de taille avec la fenêtre et à l'apparition des barres de défilement.
+        if event.type() == QEvent.Type.Resize:
+            viewport = self.viewport().geometry()
+            self.controls.place(viewport.x() + viewport.width())
+        return super().viewportEvent(event)
 
     def contextMenuEvent(self, event):
         if not self._item.pixmap().isNull():

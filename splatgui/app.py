@@ -29,7 +29,7 @@ from . import (
     CREDITS, LICENSE_SHORT, SOURCE_URL, __version__, antenna_ui, antennas, basemap, cables, hillshade, i18n, layers, layout, livemap, mappicker, prereqs,
     sites, splat, storage, terrain, themes,
 )
-from .widgets import FileList, ImageView, PathEdit
+from .widgets import FileList, ImageView, PathEdit, SliderValue, graduate
 from .i18n import N_, tr
 
 QTH_FILTER = N_("Fichiers de site (*.qth);;Tous les fichiers (*)")
@@ -1582,6 +1582,7 @@ class MainWindow(QMainWindow):
         view_row = QHBoxLayout()
         self.live_map = livemap.LiveMap()
         self.live_map.zoomChanged.connect(lambda _z: self._overlay_timer.start())
+        self.live_map.homeRequested.connect(lambda: self._update_live_map(refit=True))
         self.live_map.statusText.connect(lambda text: self.overlay_status.setText(text))
         self.live_map.srtm_url = self.settings.get("srtm_url") or terrain.DEFAULT_URL
         self.live_map.hoveredText.connect(lambda text: self.image_info.setText(
@@ -2638,7 +2639,9 @@ class MainWindow(QMainWindow):
         self.basemap_opacity.setMinimumWidth(90)
         self.basemap_opacity.setValue(int(overlay.get("basemap_opacity", 75)))
         self.basemap_opacity.setToolTip(tr("0 % : relief SPLAT! seul — 100 % : fond de carte seul"))
+        graduate(self.basemap_opacity, 10)
         row.addWidget(self.basemap_opacity, 1)
+        row.addWidget(SliderValue(self.basemap_opacity))
         self.coverage_check = QCheckBox(tr("Couverture radio :"))
         self.coverage_check.setToolTip(tr("Afficher la couverture calculée par SPLAT! "
                                        "(au-dessus de toutes les autres couches)"))
@@ -2649,7 +2652,9 @@ class MainWindow(QMainWindow):
         self.coverage_opacity.setMinimumWidth(90)
         self.coverage_opacity.setValue(int(overlay.get("coverage_opacity", 80)))
         self.coverage_opacity.setToolTip(tr("Opacité de la couverture radio (0 % : transparente, 100 % : opaque)"))
+        graduate(self.coverage_opacity, 10)
         row.addWidget(self.coverage_opacity, 1)
+        row.addWidget(SliderValue(self.coverage_opacity))
         self.crop_check = QCheckBox(tr("Cadrer sur le tracé"))
         self.crop_check.setToolTip(tr("Recadre sur le trajet point à point ou la zone couverte et "
                                    "charge un fond de carte plus détaillé"))
@@ -2678,7 +2683,9 @@ class MainWindow(QMainWindow):
         self.relief_opacity.setMinimumWidth(90)
         self.relief_opacity.setValue(int(overlay.get("relief_opacity", 60)))
         self.relief_opacity.setToolTip(tr("Intensité du relief"))
+        graduate(self.relief_opacity, 10)
         row2.addWidget(self.relief_opacity, 1)
+        row2.addWidget(SliderValue(self.relief_opacity))
         self.blur_label = QLabel(tr("Flou couverture :"))
         row2.addWidget(self.blur_label)
         self.coverage_blur = QSlider(Qt.Orientation.Horizontal)
@@ -2687,7 +2694,9 @@ class MainWindow(QMainWindow):
         self.coverage_blur.setValue(int(overlay.get("coverage_blur", 0)))
         self.coverage_blur.setToolTip(tr("Adoucit les contours de la couverture (0 : aucun flou ; "
                                       "unité : pixel de la carte SPLAT!, ≈ 90 m en standard)"))
+        graduate(self.coverage_blur, 2)
         row2.addWidget(self.coverage_blur, 1)
+        row2.addWidget(SliderValue(self.coverage_blur, "{:g} px", scale=2))
         self.coverage_blur.valueChanged.connect(lambda v: (self.coverage_blur.setToolTip(
             tr("Flou de la couverture : {v:g} pixel(s) SPLAT!", v=v / 2)), self._overlay_timer.start()))
         self.recenter_button = QPushButton(tr("Recentrer"))
@@ -2810,17 +2819,17 @@ class MainWindow(QMainWindow):
         self.layer_labels.setChecked(bool(overlay.get("labels", True)))
         vl.addWidget(self.layer_labels)
         self.layer_opacity = self._labeled_slider(vl, tr("Opacité"), 0, 100,
-                                                  overlay.get("layer_opacity", 90), "{} %")
+                                                  overlay.get("layer_opacity", 90), "{} %", 10)
         panel.addWidget(vectors)
 
         self.shade_box = QGroupBox(tr("Ombrage SRTM : soleil et relief"))
         sl = QVBoxLayout(self.shade_box)
         self.sun_azimuth = self._labeled_slider(sl, tr("Azimut du soleil"), 0, 359,
-                                                overlay.get("sun_azimuth", 315), "{}°")
+                                                overlay.get("sun_azimuth", 315), "{}°", 45, 15)
         self.sun_altitude = self._labeled_slider(sl, tr("Hauteur du soleil"), 5, 85,
-                                                 overlay.get("sun_altitude", 45), "{}°")
+                                                 overlay.get("sun_altitude", 45), "{}°", 10, 5)
         self.exaggeration = self._labeled_slider(sl, tr("Accentuation du relief"), 1, 30,
-                                                 overlay.get("exaggeration", 3), tr("× {}"))
+                                                 overlay.get("exaggeration", 3), tr("× {}"), 5)
         note = QLabel(tr("Relief « Ombrage SRTM » (liste Relief, en haut) ; tuiles SRTM téléchargées au besoin."))
         note.setWordWrap(True)
         note.setStyleSheet("color: gray;")
@@ -2845,7 +2854,7 @@ class MainWindow(QMainWindow):
         sf.addRow(tr("Émetteurs"), self.tx_icon)
         sf.addRow(tr("Récepteur"), self.rx_icon)
         size_box = QVBoxLayout()
-        self.icon_size = self._labeled_slider(size_box, tr("Taille"), 16, 160, overlay.get("icon_size", 48), "{} px")
+        self.icon_size = self._labeled_slider(size_box, tr("Taille"), 16, 160, overlay.get("icon_size", 48), "{} px", 16, 8)
         sf.addRow(size_box)
         self.site_names = QCheckBox(tr("Noms des sites"))
         self.site_names.setChecked(bool(overlay.get("site_names", True)))
@@ -2939,10 +2948,11 @@ class MainWindow(QMainWindow):
         scroll.setFixedWidth(270)
         return scroll
 
-    def _labeled_slider(self, layout, title, minimum, maximum, value, fmt):
+    def _labeled_slider(self, layout, title, minimum, maximum, value, fmt, tick, page=None):
         label = QLabel()
         slider = QSlider(Qt.Orientation.Horizontal)
         slider.setRange(minimum, maximum)
+        graduate(slider, tick, page)
         slider.valueChanged.connect(lambda v: label.setText(f"{title} : {fmt.format(v)}"))
         slider.setValue(int(value))
         label.setText(f"{title} : {fmt.format(slider.value())}")

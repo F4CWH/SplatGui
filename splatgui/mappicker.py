@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
 
 from . import basemap, hillshade
 from .i18n import tr
+from .widgets import ZoomControls
 
 TILE = 256
 MIN_ZOOM, MAX_ZOOM = 2, 18
@@ -79,6 +80,8 @@ class SlippyMap(QWidget):
 
     picked = pyqtSignal(float, float)
     hovered = pyqtSignal(float, float)
+    zoomChanged = pyqtSignal(int)
+    homeRequested = pyqtSignal()     # bouton « recentrer » des contrôles de zoom
 
     def __init__(self, source, lat, lon, zoom, parent=None):
         super().__init__(parent)
@@ -97,6 +100,12 @@ class SlippyMap(QWidget):
         self._signals.ready.connect(self._tile_ready)
         self._pool = ThreadPoolExecutor(max_workers=basemap.SOURCES[source]["workers"])
         self._press = None
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)     # touches + / − au clavier
+        self.controls = ZoomControls(self)
+        self.controls.zoomIn.connect(lambda: self.zoom_by(1))
+        self.controls.zoomOut.connect(lambda: self.zoom_by(-1))
+        self.controls.home.connect(self.homeRequested)
+        self._sync_controls()
 
     def shutdown(self):
         self._pool.shutdown(wait=False, cancel_futures=True)
@@ -112,7 +121,31 @@ class SlippyMap(QWidget):
         if zoom is not None:
             self.zoom = max(MIN_ZOOM, min(MAX_ZOOM, zoom))
         self.cx, self.cy = to_pixel(lat, lon, self.zoom)
+        self._sync_controls()
         self.update()
+
+    def zoom_by(self, step, pos=None):
+        """Change le niveau de zoom de `step` en gardant fixe le point sous `pos` (défaut : centre)."""
+        new_zoom = max(MIN_ZOOM, min(MAX_ZOOM, self.zoom + step))
+        if new_zoom == self.zoom:
+            return
+        if pos is None:
+            pos = QPointF(self.width() / 2, self.height() / 2)
+        lat, lon = self._latlon_at(pos)
+        self.zoom = new_zoom
+        x, y = to_pixel(lat, lon, new_zoom)
+        self.cx, self.cy = x - pos.x() + self.width() / 2, y - pos.y() + self.height() / 2
+        self._sync_controls()
+        self.update()
+        self.zoomChanged.emit(self.zoom)
+
+    def _sync_controls(self):
+        self.controls.set_limits(self.zoom < MAX_ZOOM, self.zoom > MIN_ZOOM)
+        self.controls.setToolTip(tr("Niveau de zoom : {zoom}", zoom=self.zoom))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.controls.place(self.width())
 
     def center(self):
         return to_latlon(self.cx, self.cy, self.zoom)
@@ -267,17 +300,16 @@ class SlippyMap(QWidget):
                 self.picked.emit(lat, lon)
 
     def wheelEvent(self, event):
-        step = 1 if event.angleDelta().y() > 0 else -1
-        new_zoom = max(MIN_ZOOM, min(MAX_ZOOM, self.zoom + step))
-        if new_zoom == self.zoom:
-            return
         # Zoom autour du point sous la souris.
-        pos = event.position()
-        lat, lon = self._latlon_at(pos)
-        self.zoom = new_zoom
-        x, y = to_pixel(lat, lon, new_zoom)
-        self.cx, self.cy = x - pos.x() + self.width() / 2, y - pos.y() + self.height() / 2
-        self.update()
+        self.zoom_by(1 if event.angleDelta().y() > 0 else -1, event.position())
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
+            self.zoom_by(1)
+        elif event.key() == Qt.Key.Key_Minus:
+            self.zoom_by(-1)
+        else:
+            super().keyPressEvent(event)
 
 
 class SitePickerDialog(QDialog):
@@ -318,6 +350,8 @@ class SitePickerDialog(QDialog):
         self.map.set_point(lat, lon)
         self.map.picked.connect(self._picked)
         self.map.hovered.connect(self._hovered)
+        self.map.controls.buttons["home"].setToolTip(tr("Recentrer sur le point choisi"))
+        self.map.homeRequested.connect(lambda: self.map.center_on(self.lat.value(), self.lon.value()))
         self.source.currentIndexChanged.connect(lambda _i: self.map.set_source(self.source.currentData()))
 
         self.lat = QDoubleSpinBox()
@@ -348,7 +382,7 @@ class SitePickerDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
-        help_text = QLabel(tr("Clic : placer le point — glisser : se déplacer — molette : zoomer"))
+        help_text = QLabel(tr("Clic : placer le point — glisser : se déplacer — molette ou + / − : zoomer"))
         help_text.setStyleSheet("color: gray;")
 
         layout = QVBoxLayout(self)
