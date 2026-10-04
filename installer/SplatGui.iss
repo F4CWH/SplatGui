@@ -17,6 +17,10 @@ AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
 AppPublisher=F4CWH
+; Code source (GNU GPL) : lien affiché dans « Programmes et fonctionnalités ».
+AppPublisherURL=https://github.com/alcyone6/SplatGui
+AppSupportURL=https://github.com/alcyone6/SplatGui
+AppUpdatesURL=https://github.com/alcyone6/SplatGui
 DefaultDirName={autopf}\SplatGui
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes

@@ -68,7 +68,7 @@
  [],
  False,
  False,
- 1791145707,
+ 1791146940,
  [('runw.exe',
    'D:\\Python\\Projets_PyCharm\\Splat!Gui\\.venv\\Lib\\site-packages\\PyInstaller\\bootloader\\Windows-64bit-intel\\runw.exe',
    'EXECUTABLE')],

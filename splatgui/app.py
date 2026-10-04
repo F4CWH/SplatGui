@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
 )
 
 from . import (
-    CREDITS, LICENSE_SHORT, __version__, antenna_ui, antennas, basemap, cables, hillshade, i18n, layers, layout, livemap, mappicker, prereqs,
+    CREDITS, LICENSE_SHORT, SOURCE_URL, __version__, antenna_ui, antennas, basemap, cables, hillshade, i18n, layers, layout, livemap, mappicker, prereqs,
     sites, splat, storage, terrain, themes,
 )
 from .widgets import FileList, ImageView, PathEdit
@@ -935,7 +935,11 @@ class MainWindow(QMainWindow):
                              "ou (à votre choix) toute version ultérieure.")) + "<br><br>"
             + html.escape(tr("Ils sont distribués dans l'espoir qu'ils seront utiles, mais SANS AUCUNE GARANTIE, "
                              "sans même la garantie implicite de qualité marchande ou d'adéquation à un usage "
-                             "particulier. Voir Aide → Licence (GNU GPL v2).")))
+                             "particulier. Voir Aide → Licence (GNU GPL v2).")) + "<br><br>"
+            + html.escape(tr("Code source :")) + f' <a href="{SOURCE_URL}">{SOURCE_URL}</a>')
+        box.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        for label in box.findChildren(QLabel):
+            label.setOpenExternalLinks(True)          # lien ouvert dans le navigateur
         box.exec()
 
     def show_license(self):
@@ -949,7 +953,10 @@ class MainWindow(QMainWindow):
         dialog.setWindowTitle(tr("Licence (GNU GPL v2)"))
         dialog.resize(640, 700)
         layout = QVBoxLayout(dialog)
-        intro = QLabel(tr("SPLAT! et Splat!Gui : GNU GPL version 2 ou (à votre choix) toute version ultérieure."))
+        intro = QLabel(html.escape(tr("SPLAT! et Splat!Gui : GNU GPL version 2 ou (à votre choix) toute version "
+                                      "ultérieure.")) + "<br>" + html.escape(tr("Code source :"))
+                       + f' <a href="{SOURCE_URL}">{SOURCE_URL}</a>')
+        intro.setOpenExternalLinks(True)
         intro.setWordWrap(True)
         layout.addWidget(intro)
         view = QPlainTextEdit(text or tr("Texte de la licence introuvable : https://www.gnu.org/licenses/old-licenses/gpl-2.0.html"))
