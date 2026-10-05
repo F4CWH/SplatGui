@@ -1,4 +1,4 @@
-"""Fenêtre principale de Splat!Gui."""
+"""Fenêtre principale de SPLAT!Gui."""
 
 import datetime
 import html
@@ -50,7 +50,7 @@ def data_folder(folder):
     except OSError:
         pass
     return str(folder)
-PROFILE_FILTER = N_("Profil Splat!Gui (*.json)")
+PROFILE_FILTER = N_("Profil SPLAT!Gui (*.json)")
 
 
 def format_size(size):
@@ -836,7 +836,7 @@ class MainWindow(QMainWindow):
         self.splat_output = ""
         self._loading = False
 
-        self.setWindowTitle(tr("Splat!Gui"))
+        self.setWindowTitle(tr("SPLAT!Gui"))
         step(20, tr("Construction de l'interface…"))
         self._build_toolbar()
         step(30, tr("Panneaux de paramètres et de résultats…"))
@@ -986,10 +986,10 @@ class MainWindow(QMainWindow):
         box.setIconPixmap(app_icon().pixmap(64, 64))
         box.setTextFormat(Qt.TextFormat.RichText)
         box.setText(
-            f"<b>Splat!Gui {__version__}</b><br>"
+            f"<b>SPLAT!Gui {__version__}</b><br>"
             + html.escape(tr("Interface graphique pour SPLAT! 1.4.2 (x64 / x86, standard / HD).")) + "<br><br>"
             + html.escape(tr(CREDITS)) + "<br><br>"
-            + html.escape(tr("SPLAT! (John A. Magliacane, KD2BD) et Splat!Gui (F4CWH) sont des logiciels libres : "
+            + html.escape(tr("SPLAT! (John A. Magliacane, KD2BD) et SPLAT!Gui (F4CWH) sont des logiciels libres : "
                              "vous pouvez les redistribuer et/ou les modifier selon les termes de la licence "
                              "publique générale GNU (GNU GPL) publiée par la Free Software Foundation, version 2 "
                              "ou (à votre choix) toute version ultérieure.")) + "<br><br>"
@@ -1013,7 +1013,7 @@ class MainWindow(QMainWindow):
         dialog.setWindowTitle(tr("Licence (GNU GPL v2)"))
         dialog.resize(640, 700)
         layout = QVBoxLayout(dialog)
-        intro = QLabel(html.escape(tr("SPLAT! et Splat!Gui : GNU GPL version 2 ou (à votre choix) toute version "
+        intro = QLabel(html.escape(tr("SPLAT! et SPLAT!Gui : GNU GPL version 2 ou (à votre choix) toute version "
                                       "ultérieure.")) + "<br>" + html.escape(tr("Code source :"))
                        + f' <a href="{SOURCE_URL}">{SOURCE_URL}</a>')
         intro.setOpenExternalLinks(True)
@@ -1901,7 +1901,7 @@ class MainWindow(QMainWindow):
 
     def _set_dirty(self, dirty):
         self.dirty = dirty
-        self.setWindowTitle(f"Splat!Gui — {self.profile_name}{' *' if dirty else ''}")
+        self.setWindowTitle(f"SPLAT!Gui — {self.profile_name}{' *' if dirty else ''}")
 
     # ---- Profils -------------------------------------------------------------
 
@@ -2583,7 +2583,7 @@ class MainWindow(QMainWindow):
         if self.frame_km and not online:
             notes.append(tr("Cadre de {w:.1f} × {h:.1f} km", w=self.frame_km[0], h=self.frame_km[1]))
         if not online:
-            notes.append(tr("Calcul : SPLAT! — carte : Splat!Gui"))
+            notes.append(tr("Calcul : SPLAT! — carte : SPLAT!Gui"))
         return layout.legend_entries(Path(self.image_combo.currentData()).parent, coverage,
                                      self.current_sites, site_icons, checked_layers, notes,
                                      self.coverage_check.isChecked())
@@ -2710,7 +2710,7 @@ class MainWindow(QMainWindow):
                         layers.choose_level(self.geo_layers[n], pixel_m)) for n in self._checked_layers()]
         shade = (self.sun_azimuth.value(), self.sun_altitude.value(), self.exaggeration.value())
         url = self.settings.get("srtm_url") or terrain.DEFAULT_URL
-        opacity, title = self.coverage_opacity.value() / 100, f"Splat!Gui — {run_dir.name}"
+        opacity, title = self.coverage_opacity.value() / 100, f"SPLAT!Gui — {run_dir.name}"
         signals = self.live_map.statusText
 
         def build():
@@ -3667,7 +3667,7 @@ def main():
         except (AttributeError, OSError):
             pass
     app = QApplication(sys.argv)
-    app.setApplicationName("Splat!Gui")
+    app.setApplicationName("SPLAT!Gui")
     app.setStyle("Fusion")
     app.setWindowIcon(app_icon())
     settings = storage.load_settings()

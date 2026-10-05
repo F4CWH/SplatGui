@@ -1,6 +1,6 @@
 """Interface graphique pour SPLAT! (versions x64 et x86, standard et HD)."""
 
-__version__ = "1.0.0"
-CREDITS = "Splat! de KD2BD / Splat!Gui de F4CWH"
+__version__ = "1.1.0"
+CREDITS = "Splat! de KD2BD / SPLAT!Gui de F4CWH"
 LICENSE_SHORT = "Licence GNU GPL v2 ou ultérieure"
-SOURCE_URL = "https://github.com/alcyone6/SplatGui"          # code source (GNU GPL)
+SOURCE_URL = "https://github.com/F4CWH/SplatGui"          # code source (GNU GPL)
