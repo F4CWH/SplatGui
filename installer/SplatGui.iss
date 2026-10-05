@@ -1,15 +1,15 @@
-﻿; Installeur de Splat!Gui (Inno Setup 6) — à compiler avec build_installer.ps1, qui
+﻿; Installeur de SPLAT!Gui (Inno Setup 6) — à compiler avec build_installer.ps1, qui
 ; recompile l'application (PyInstaller) puis passe la version : ISCC /DAppVersion=x.y.z SplatGui.iss
 ;
-; Installation par utilisateur (%LOCALAPPDATA%\Programs\SplatGui), sans droits administrateur :
+; Installation par utilisateur (%LOCALAPPDATA%\Programs\SPLAT!Gui), sans droits administrateur :
 ; l'application écrit ses données (réglages, résultats, relief, DLL…) à côté de l'exécutable.
 
 #ifndef AppVersion
-  #define AppVersion "1.0.0"
+  #define AppVersion "1.1.0"
 #endif
-#define AppName "Splat!Gui"
-#define AppExe "SplatGui.exe"
-#define DistDir "..\dist\SplatGui"
+#define AppName "SPLAT!Gui"
+#define AppExe "SPLAT!Gui.exe"
+#define DistDir "..\dist\SPLAT!Gui"
 
 [Setup]
 AppId={{6F2B8C41-3D7A-4E59-9B1F-5A0C2E7D8F34}
@@ -18,21 +18,21 @@ AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
 AppPublisher=F4CWH
 ; Code source (GNU GPL) : lien affiché dans « Programmes et fonctionnalités ».
-AppPublisherURL=https://github.com/alcyone6/SplatGui
-AppSupportURL=https://github.com/alcyone6/SplatGui
-AppUpdatesURL=https://github.com/alcyone6/SplatGui
-DefaultDirName={autopf}\SplatGui
+AppPublisherURL=https://github.com/F4CWH/SplatGui
+AppSupportURL=https://github.com/F4CWH/SplatGui
+AppUpdatesURL=https://github.com/F4CWH/SplatGui
+DefaultDirName={autopf}\SPLAT!Gui
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist
-OutputBaseFilename=SplatGui-Setup-{#AppVersion}
+OutputBaseFilename=SPLAT!Gui-Setup-{#AppVersion}
 SetupIconFile=..\icons\splat_icon.ico
-; SPLAT! et Splat!Gui : GNU GPL version 2 ou ultérieure (texte à accepter avant l'installation).
+; SPLAT! et SPLAT!Gui : GNU GPL version 2 ou ultérieure (texte à accepter avant l'installation).
 LicenseFile=..\LICENSE
-AppCopyright=Splat! (KD2BD) / Splat!Gui (F4CWH) — GNU GPL v2 ou ultérieure
+AppCopyright=Splat! (KD2BD) / SPLAT!Gui (F4CWH) — GNU GPL v2 ou ultérieure
 UninstallDisplayIcon={app}\{#AppExe}
 Compression=lzma2/max
 SolidCompression=yes
@@ -56,6 +56,12 @@ Source: "{#DistDir}\antennas\*"; DestDir: "{app}\antennas"; Flags: onlyifdoesnte
 [InstallDelete]
 ; Mise à jour : bibliothèques de la version précédente (modules supprimés ou renommés).
 Type: filesandordirs; Name: "{app}\lib"
+; Exécutable des versions 1.1.0 et antérieures (renommé SPLAT!Gui.exe).
+Type: files; Name: "{app}\SplatGui.exe"
+; Raccourcis « Splat!Gui » des versions précédentes : supprimés pour être recréés sous le nom SPLAT!Gui.
+Type: files; Name: "{group}\{#AppName}.lnk"
+Type: files; Name: "{group}\{cm:UninstallProgram,{#AppName}}.lnk"
+Type: files; Name: "{autodesktop}\{#AppName}.lnk"
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"
@@ -102,7 +108,7 @@ var
   I: Integer;
 begin
   FoldersPage := CreateInputDirPage(wpSelectDir, 'Dossiers de travail',
-    'Où Splat!Gui doit-il enregistrer ses fichiers ?',
+    'Où SPLAT!Gui doit-il enregistrer ses fichiers ?',
     'Résultats des calculs, fichiers de sites et paramètres ITM. Ces dossiers peuvent se trouver hors du ' +
     'dossier d''installation (autre disque, dossier partagé…) ; ils restent modifiables dans Fichier → Réglages.',
     False, '');
@@ -181,7 +187,7 @@ end;
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if (CurUninstallStep = usPostUninstall) and DirExists(ExpandConstant('{app}')) then
-    if not UninstallSilent and (MsgBox('Supprimer aussi les données de Splat!Gui (réglages, profils, résultats, ' +
+    if not UninstallSilent and (MsgBox('Supprimer aussi les données de SPLAT!Gui (réglages, profils, résultats, ' +
         'relief, exécutables SPLAT! et DLL) présentes dans :' + #13#10 + ExpandConstant('{app}') + ' ?',
         mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES) then
       DelTree(ExpandConstant('{app}'), True, True, True);

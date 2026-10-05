@@ -25,7 +25,7 @@ from .i18n import N_, tr
 TILES_DIR = TERRAIN_DIR / "tiles"
 TILE = 256
 MAX_TILES = 144
-USER_AGENT = f"SplatGui/{__version__} (interface pour SPLAT!, cache local des tuiles)"
+USER_AGENT = f"SPLAT!Gui/{__version__} (interface pour SPLAT!, cache local des tuiles)"
 
 _IGN = ("https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER={layer}"
         "&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT={fmt}")
@@ -456,7 +456,7 @@ def write_geo(ppm_path, ref):
         f"TIEPOINT\t0\t0\t{ref.lon0:.6f}\t\t{ref.lat0:.6f}",
         f"TIEPOINT\t{ref.width - 1}\t{ref.height - 1}\t{ref.lon1:.6f}\t\t{ref.lat1:.6f}",
         f"IMAGESIZE\t{ref.width}\t{ref.height}",
-        "#", "# Généré par Splat!Gui (proportions réelles)", "#",
+        "#", "# Généré par SPLAT!Gui (proportions réelles)", "#",
     ]
     Path(ppm_path).with_suffix(".geo").write_text("\n".join(lines) + "\n", encoding="latin-1")
 

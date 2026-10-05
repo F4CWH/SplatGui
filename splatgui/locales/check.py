@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]          # splatgui/
-EXTRA = ["Splat! de KD2BD / Splat!Gui de F4CWH",           # CREDITS (splatgui/__init__.py)
+EXTRA = ["Splat! de KD2BD / SPLAT!Gui de F4CWH",           # CREDITS (splatgui/__init__.py)
          "Licence GNU GPL v2 ou ultérieure"]                    # LICENSE_SHORT
 
 

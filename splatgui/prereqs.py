@@ -194,7 +194,7 @@ def installed_executables(arch):
 def fetch(url, log, cancel):
     """Contenu d'une URL, avec suivi de la progression."""
     log("  " + tr("Téléchargement : {url}", url=url) + "\n")
-    request = urllib.request.Request(url, headers={"User-Agent": "Splat!Gui"})
+    request = urllib.request.Request(url, headers={"User-Agent": "SPLAT!Gui"})
     with urllib.request.urlopen(request, timeout=60) as response:
         total = int(response.headers.get("Content-Length") or 0)
         buffer = io.BytesIO()

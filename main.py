@@ -1,4 +1,4 @@
-"""Point d'entrée de Splat!Gui : interface graphique PyQt6 pour SPLAT!."""
+"""Point d'entrée de SPLAT!Gui : interface graphique PyQt6 pour SPLAT!."""
 
 import sys
 

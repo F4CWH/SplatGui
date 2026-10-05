@@ -1,4 +1,4 @@
-﻿# Compile Splat!Gui (PyInstaller) puis l'installeur (Inno Setup) : dist\SplatGui-Setup-<version>.exe
+﻿# Compile SPLAT!Gui (PyInstaller) puis l'installeur (Inno Setup) : dist\SPLAT!Gui-Setup-<version>.exe
 # Usage : powershell -ExecutionPolicy Bypass -File installer\build_installer.ps1 [-SkipPyInstaller]
 param([switch]$SkipPyInstaller)
 $ErrorActionPreference = "Stop"
@@ -18,4 +18,4 @@ if (-not $iscc) { throw "Inno Setup 6 introuvable (winget install JRSoftware.Inn
 
 & $iscc "/DAppVersion=$version" "$PSScriptRoot\SplatGui.iss"
 if ($LASTEXITCODE) { throw "Échec d'Inno Setup ($LASTEXITCODE)" }
-Write-Host "Installeur : $root\dist\SplatGui-Setup-$version.exe"
+Write-Host "Installeur : $root\dist\SPLAT!Gui-Setup-$version.exe"

@@ -1,10 +1,10 @@
-# Splat!Gui
+# SPLAT!Gui
 
 Interface graphique Windows pour **[SPLAT!](https://www.qsl.net/kd2bd/splat.html)** (*Signal Propagation, Loss, And Terrain*), l'outil d'analyse de propagation radio et de relief de John A. Magliacane, KD2BD, pour les fréquences de 20 MHz à 20 GHz.
 
-Splat!Gui prépare les fichiers d'entrée de SPLAT! (sites `.qth`, paramètres ITM `.lrp`, diagrammes d'antenne `.az` / `.el`). Il télécharge et convertit le relief SRTM, lance le calcul, puis affiche les rapports et les cartes de couverture, y compris sur un fond OpenStreetMap ou IGN.
+SPLAT!Gui prépare les fichiers d'entrée de SPLAT! (sites `.qth`, paramètres ITM `.lrp`, diagrammes d'antenne `.az` / `.el`). Il télécharge et convertit le relief SRTM, lance le calcul, puis affiche les rapports et les cartes de couverture, y compris sur un fond OpenStreetMap ou IGN.
 
-Code source : <https://github.com/alcyone6/SplatGui>
+Code source : <https://github.com/F4CWH/SplatGui>
 
 ## Fonctionnalités
 
@@ -29,7 +29,7 @@ Code source : <https://github.com/alcyone6/SplatGui>
 
 ## Installation
 
-Téléchargez l'installeur `SplatGui-Setup-<version>.exe` et lancez-le. L'installation se fait par utilisateur (`%LOCALAPPDATA%\Programs\SplatGui`), sans droits administrateur. L'assistant permet de choisir :
+Téléchargez l'installeur `SPLAT!Gui-Setup-<version>.exe` et lancez-le. L'installation se fait par utilisateur (`%LOCALAPPDATA%\Programs\SPLAT!Gui`), sans droits administrateur. L'assistant permet de choisir :
 
 - le dossier des **résultats** des calculs (`runs`) ;
 - le dossier des **sites** (`qth`) ;
@@ -39,7 +39,7 @@ Ces dossiers restent modifiables dans **Fichier → Réglages**.
 
 ### SPLAT!, ses DLL et gnuplot
 
-SPLAT! n'est distribué qu'en code source : Splat!Gui ne contient pas ses exécutables Windows. Au premier démarrage, l'application propose la fenêtre **Fichier → Pré-requis (SPLAT!, DLL, gnuplot)…**, qui permet :
+SPLAT! n'est distribué qu'en code source : SPLAT!Gui ne contient pas ses exécutables Windows. Au premier démarrage, l'application propose la fenêtre **Fichier → Pré-requis (SPLAT!, DLL, gnuplot)…**, qui permet :
 
 - d'installer `splat.exe`, `splat-hd.exe` et les utilitaires (`srtm2sdf`…) depuis une archive `.zip` / `.tar.*`, locale ou en ligne. L'architecture x64 / x86 de chaque exécutable est détectée automatiquement ;
 - de télécharger les DLL d'exécution :
@@ -68,8 +68,8 @@ powershell -ExecutionPolicy Bypass -File installer\build_installer.ps1
 
 Le script produit :
 
-- `dist\SplatGui\` : l'application, avec `SplatGui.exe` et ses bibliothèques dans `lib\` ;
-- `dist\SplatGui-Setup-<version>.exe` : l'installeur.
+- `dist\SPLAT!Gui\` : l'application, avec `SPLAT!Gui.exe` et ses bibliothèques dans `lib\` ;
+- `dist\SPLAT!Gui-Setup-<version>.exe` : l'installeur.
 
 La version est lue dans `splatgui/__init__.py`. L'option `-SkipPyInstaller` reconstruit seulement l'installeur.
 
@@ -104,7 +104,7 @@ Pour ajouter une langue :
 
 ## Licence
 
-SPLAT! (John A. Magliacane, KD2BD) et Splat!Gui (F4CWH) sont des logiciels libres. Vous pouvez les redistribuer et/ou les modifier selon les termes de la **licence publique générale GNU (GNU GPL)** publiée par la Free Software Foundation, **version 2 ou (à votre choix) toute version ultérieure**. Le texte complet de la licence est dans [`LICENSE`](LICENSE).
+SPLAT! (John A. Magliacane, KD2BD) et SPLAT!Gui (F4CWH) sont des logiciels libres. Vous pouvez les redistribuer et/ou les modifier selon les termes de la **licence publique générale GNU (GNU GPL)** publiée par la Free Software Foundation, **version 2 ou (à votre choix) toute version ultérieure**. Le texte complet de la licence est dans [`LICENSE`](LICENSE).
 
 Ces programmes sont distribués dans l'espoir qu'ils seront utiles, mais **sans aucune garantie**, sans même la garantie implicite de qualité marchande ou d'adéquation à un usage particulier.
 

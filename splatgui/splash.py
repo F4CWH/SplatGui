@@ -55,7 +55,7 @@ def splash_image(scale=1.0):
     title.setPixelSize(28)
     title.setBold(True)
     path = QPainterPath()
-    path.addText(14, 34, title, "Splat!Gui")
+    path.addText(14, 34, title, "SPLAT!Gui")
     painter.setPen(QPen(QColor(8, 18, 38, 200), 3))
     painter.drawPath(path)
     painter.fillPath(path, QColor(255, 255, 255))
