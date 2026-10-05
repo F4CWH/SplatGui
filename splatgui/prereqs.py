@@ -8,12 +8,16 @@
     x64 : msys-2.0.dll, msys-stdc++-6.dll, msys-gcc_s-seh-1.dll, msys-z.dll… (dépôt MSYS2,
           SHA-256 vérifié)
     x86 : libstdc++-6.dll, libgcc_s_dw2-1.dll, libbz2-2.dll, zlib1.dll (MinGW.org, GCC 6.3.0)
+- gnuplot (graphes point à point) : distribution Windows officielle (64 bits,
+  SHA-256 vérifié) extraite dans gnuplot/, dont le dossier bin/ est ajouté au PATH d'exécution
+  des deux architectures (gnuplot est lancé comme processus séparé par SPLAT!).
 """
 
 import hashlib
 import io
 import lzma
 import os
+import shutil
 import struct
 import tarfile
 import tempfile
@@ -26,6 +30,13 @@ from .i18n import tr
 
 DEPS_DIR = PROJECT_DIR / "deps"
 TOOLS_DIR = PROJECT_DIR / "tools"
+GNUPLOT_DIR = PROJECT_DIR / "gnuplot"
+
+# Dernière version publiée en .zip (les suivantes ne sont qu'en .7z / installateur).
+GNUPLOT_VERSION = "6.0.3"
+GNUPLOT_URL = "https://downloads.sourceforge.net/project/gnuplot/gnuplot/6.0.3/gp603-win64-mingw.zip"
+GNUPLOT_SHA256 = "215df79b3388d2e5e7335017267fbb305345c142676f0502c1ad237c23478ccc"
+GNUPLOT_SKIPPED = ("docs/", "demo/")      # documentation et démos non installées
 
 MSYS2_REPOS = {
     "msys": "https://repo.msys2.org/msys/x86_64/msys.db",
@@ -143,13 +154,20 @@ def missing_dlls(arch, extra_paths=""):
 
 
 def check(extra_paths):
-    """État des dépendances par architecture : {arch: {"splat": [...], "missing": [...]}}."""
+    """État des dépendances par architecture :
+    {arch: {"splat": [...], "missing": [...], "gnuplot": chemin de gnuplot.exe ou None}}."""
     report = {}
     for arch in PE_MACHINES.values():
         names = {p.name.lower() for p in installed_executables(arch)}
         report[arch] = {"splat": sorted(SPLAT_NAMES & names),
-                        "missing": missing_dlls(arch, extra_paths.get(arch, "")) if names else []}
+                        "missing": missing_dlls(arch, extra_paths.get(arch, "")) if names else [],
+                        "gnuplot": find_gnuplot(extra_paths.get(arch, ""))}
     return report
+
+
+def gnuplot_missing(report):
+    """Architectures de SPLAT! installées qui ne trouveront pas gnuplot."""
+    return [arch for arch, state in report.items() if state["splat"] and not state["gnuplot"]]
 
 
 def summary(report):
@@ -159,6 +177,8 @@ def summary(report):
         return False, tr("SPLAT! absent (ni x64 ni x86)")
     problems = [tr("{n} DLL {arch} manquante(s)", n=len(state["missing"]), arch=arch)
                 for arch, state in report.items() if state["splat"] and state["missing"]]
+    if gnuplot_missing(report):
+        problems.append(tr("gnuplot absent"))
     if problems:
         return False, tr("Dépendances : ") + ", ".join(problems)
     return True, tr("Dépendances présentes (SPLAT! {arches})", arches=", ".join(installed))
@@ -320,10 +340,64 @@ def install_splat(source, log, cancel=lambda: False):
     return installed
 
 
+def _path_with(extra_paths, folder, first):
+    """Chaîne PATH complétée par `folder` (en tête ou en fin) s'il n'y figure pas."""
+    folder = str(folder)
+    current = [p for p in extra_paths.split(";") if p.strip()]
+    if any(os.path.normcase(os.path.normpath(p)) == os.path.normcase(os.path.normpath(folder)) for p in current):
+        return ";".join(current)
+    return ";".join([folder] + current if first else current + [folder])
+
+
 def add_to_path_setting(extra_paths, arch):
     """Chaîne PATH de `arch` complétée par deps/<arch> (en tête) s'il n'y figure pas."""
-    folder = str(dll_dir(arch))
-    current = [p for p in extra_paths.split(";") if p.strip()]
-    if any(os.path.normcase(os.path.normpath(p)) == os.path.normcase(folder) for p in current):
-        return ";".join(current)
-    return ";".join([folder] + current)
+    return _path_with(extra_paths, dll_dir(arch), first=True)
+
+
+# --- gnuplot ----------------------------------------------------------------------
+
+def gnuplot_bin():
+    return GNUPLOT_DIR / "bin"
+
+
+def find_gnuplot(extra_paths=""):
+    """Chemin de gnuplot.exe tel que SPLAT! le trouvera (`extra_paths` puis le PATH), ou None."""
+    for folder in (extra_paths + os.pathsep + os.environ.get("PATH", "")).split(os.pathsep):
+        if folder.strip() and (Path(folder.strip()) / "gnuplot.exe").is_file():
+            return Path(folder.strip()) / "gnuplot.exe"
+    return None
+
+
+def add_gnuplot_to_path_setting(extra_paths):
+    """Chaîne PATH complétée par gnuplot/bin (en fin : ses DLL ne masquent pas celles de SPLAT!)."""
+    return _path_with(extra_paths, gnuplot_bin(), first=False)
+
+
+def install_gnuplot(log, cancel=lambda: False):
+    """Télécharge la distribution Windows de gnuplot et l'installe dans gnuplot/ (remplace
+    une installation précédente). Renvoie le chemin de gnuplot.exe."""
+    data = fetch(GNUPLOT_URL, log, cancel)
+    if hashlib.sha256(data).hexdigest() != GNUPLOT_SHA256:
+        raise RuntimeError(tr("Somme SHA-256 incorrecte pour {url}", url=GNUPLOT_URL))
+    log(tr("Extraction dans {folder}…", folder=_label(GNUPLOT_DIR)) + "\n")
+    staging = GNUPLOT_DIR.with_name(GNUPLOT_DIR.name + ".part")
+    shutil.rmtree(staging, ignore_errors=True)
+    count = 0
+    for name, read in _archive_members(data, GNUPLOT_URL):
+        if cancel():
+            shutil.rmtree(staging, ignore_errors=True)
+            raise Cancelled()
+        relative = name.split("/", 1)[1] if name.startswith("gnuplot/") else name
+        if not relative or relative.startswith(GNUPLOT_SKIPPED) or ".." in Path(relative).parts:
+            continue
+        target = staging / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(read())
+        count += 1
+    if not (staging / "bin" / "gnuplot.exe").is_file():
+        shutil.rmtree(staging, ignore_errors=True)
+        raise RuntimeError(tr("L'archive ne contient pas gnuplot.exe."))
+    shutil.rmtree(GNUPLOT_DIR, ignore_errors=True)
+    os.replace(staging, GNUPLOT_DIR)
+    log(tr("{n} fichiers installés.", n=count) + "\n")
+    return str(gnuplot_bin() / "gnuplot.exe")

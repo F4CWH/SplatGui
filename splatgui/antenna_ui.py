@@ -219,7 +219,7 @@ class AntennaManager(QDialog):
         right_layout.addWidget(self.info)
         note = QLabel(tr("SPLAT! applique les diagrammes d'antenne aux calculs de perte de trajet et de champ "
                       "(mode -L) et au point à point ; la couverture en visibilité (-c) les ignore. "
-                      "La PAR (onglet Propagation) doit inclure le gain de l'antenne."))
+                      "La PAR (onglet Analyse) doit inclure le gain de l'antenne."))
         note.setWordWrap(True)
         note.setStyleSheet("color: gray;")
         right_layout.addWidget(note)

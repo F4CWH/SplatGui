@@ -99,7 +99,7 @@ def default_params():
         "ano": "",
         "log": True,
         "extra_args": "",
-        "erp_calc": {               # calcul de la PAR (onglet Antenne)
+        "erp_calc": {               # calcul de la PAR (onglet Émetteurs)
             "power": 10.0,          # W
             "cable": "",            # cables.CABLES, "custom" ou "" (aucun)
             "attenuation": 10.0,    # dB/100 m (câble personnalisé)
