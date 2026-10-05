@@ -267,6 +267,42 @@ def convert(tile, srtm_path, hd, sdf_dir, converters, log, cancel):
         shutil.rmtree(work, ignore_errors=True)
 
 
+# --- Occupation du disque ---------------------------------------------------------
+
+SRTM_SUFFIXES = (".hgt", ".hgt.gz", ".zip")
+
+
+def folder_usage(folder, suffixes):
+    """(nombre, taille totale en octets) des fichiers de `folder` (sans sous-dossiers) dont le
+    nom se termine par l'un des `suffixes` ; (0, 0) si le dossier n'existe pas."""
+    count = size = 0
+    try:
+        entries = list(os.scandir(folder))
+    except OSError:
+        return 0, 0
+    for entry in entries:
+        try:
+            if entry.is_file() and entry.name.lower().endswith(suffixes):
+                count += 1
+                size += entry.stat().st_size
+        except OSError:
+            continue
+    return count, size
+
+
+def disk_space(folder):
+    """(racine du lecteur, octets libres, octets au total) du lecteur de `folder` (premier
+    dossier parent existant), ou None."""
+    path = Path(folder).resolve()
+    while not path.exists() and path != path.parent:
+        path = path.parent
+    try:
+        usage = shutil.disk_usage(path)
+    except OSError:
+        return None
+    return path.anchor or str(path), usage.free, usage.total
+
+
 def ensure_tiles(tiles, hd, sdf_dir, converters, url_template, log, cancel=lambda: False,
                  retry_unavailable=False, progress=lambda done, total: None):
     """Garantit la présence des SDF des tuiles demandées. Renvoie un résumé (dict de listes).

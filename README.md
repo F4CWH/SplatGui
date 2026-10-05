@@ -25,7 +25,7 @@ Code source : <https://github.com/alcyone6/SplatGui>
   - export PNG / PPM géoréférencé ou en page web Leaflet.
 - **Profils et historique** : paramètres enregistrés par profil, historique des calculs rechargeable.
 - **Interface** : français, anglais et espagnol ; thèmes Système, Clair, Sombre, Bleu nuit, Sépia et Contraste élevé.
-- **Pré-requis** : vérification à chaque démarrage. Téléchargement des DLL nécessaires à SPLAT! (MSYS2 pour x64, MinGW pour x86) et installation des exécutables SPLAT! depuis une archive, locale ou en ligne.
+- **Pré-requis** : vérification à chaque démarrage. Téléchargement des DLL nécessaires à SPLAT! (MSYS2 pour x64, MinGW pour x86) et de gnuplot, et installation des exécutables SPLAT! depuis une archive, locale ou en ligne.
 
 ## Installation
 
@@ -37,16 +37,15 @@ Téléchargez l'installeur `SplatGui-Setup-<version>.exe` et lancez-le. L'instal
 
 Ces dossiers restent modifiables dans **Fichier → Réglages**.
 
-### SPLAT! et ses DLL
+### SPLAT!, ses DLL et gnuplot
 
-SPLAT! n'est distribué qu'en code source : Splat!Gui ne contient pas ses exécutables Windows. Au premier démarrage, l'application propose la fenêtre **Fichier → Pré-requis (SPLAT!, DLL)…**, qui permet :
+SPLAT! n'est distribué qu'en code source : Splat!Gui ne contient pas ses exécutables Windows. Au premier démarrage, l'application propose la fenêtre **Fichier → Pré-requis (SPLAT!, DLL, gnuplot)…**, qui permet :
 
 - d'installer `splat.exe`, `splat-hd.exe` et les utilitaires (`srtm2sdf`…) depuis une archive `.zip` / `.tar.*`, locale ou en ligne. L'architecture x64 / x86 de chaque exécutable est détectée automatiquement ;
 - de télécharger les DLL d'exécution :
   - **x64** : `msys-2.0.dll`, `msys-stdc++-6.dll`, etc., depuis le dépôt MSYS2, avec vérification SHA-256 ;
-  - **x86** : `libstdc++-6.dll`, `libgcc_s_dw2-1.dll`, `libbz2-2.dll`, `zlib1.dll`, depuis MinGW.org et MSYS2.
-
-`gnuplot.exe` est facultatif ; il sert aux graphes point à point. Il s'ajoute au PATH dans **Fichier → Réglages**.
+  - **x86** : `libstdc++-6.dll`, `libgcc_s_dw2-1.dll`, `libbz2-2.dll`, `zlib1.dll`, depuis MinGW.org et MSYS2 ;
+- de télécharger **gnuplot** 6.0.3 (distribution Windows 64 bits officielle, avec vérification SHA-256), nécessaire aux graphes point à point. Il est installé dans `gnuplot\` et son dossier `bin` est ajouté au PATH des deux architectures. Un gnuplot déjà installé ailleurs peut aussi être ajouté au PATH dans **Fichier → Réglages**.
 
 ## Utilisation depuis les sources
 

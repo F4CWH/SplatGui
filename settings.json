@@ -27,12 +27,12 @@
     },
     "lrp": {
       "enabled": true,
-      "dielectric": 15.0,
+      "dielectric": 16.0,
       "conductivity": 0.005,
       "bending": 301.0,
       "frequency": 435.0,
       "frac_situations": 0.5,
-      "frac_time": 0.9,
+      "frac_time": 0.95,
       "erp": 5.0,
       "climate": 6,
       "polarization": 1
@@ -95,7 +95,7 @@
   "runs_dir": "runs",
   "qth_dir": "qth",
   "lrp_dir": "lrp",
-  "geometry_qt": "AdnQywADAAAAAAAAAAAAAAAACcUAAAPrAAAAAgAAAAIAAAnDAAAD6QAAAAAAAAAAAyAAAAACAAAAAgAACcMAAAPp",
+  "geometry_qt": "AdnQywADAAAAAAAA////+QAABm0AAANtAAABHgAAACUAAAZHAAADGQAAAAACAAAABm4AAAAAAAAAFwAABm0AAANt",
   "srtm_url": "https://s3.amazonaws.com/elevation-tiles-prod/skadi/{lat_dir}/{tile}.hgt.gz",
   "overlay": {
     "source": "osm",

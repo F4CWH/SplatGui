@@ -53,6 +53,14 @@ def data_folder(folder):
 PROFILE_FILTER = N_("Profil Splat!Gui (*.json)")
 
 
+def format_size(size):
+    """Taille lisible : 512 o, 3,2 Mo, 1,25 Go…"""
+    for unit, factor, decimals in ((N_("Go"), 1e9, 2), (N_("Mo"), 1e6, 1), (N_("Ko"), 1e3, 1)):
+        if size >= factor:
+            return f"{size / factor:.{decimals}f} {tr(unit)}"
+    return f"{size} {tr('o')}"
+
+
 def mono_font():
     font = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
     font.setPointSize(9)
@@ -281,7 +289,7 @@ class SiteTable(QWidget):
     NO_ANTENNA = N_("(isotrope)")
 
     def __init__(self, on_change, on_pick=None, parent=None, on_row=None):
-        """`on_row(ligne)` : émetteur courant changé (onglet Antenne)."""
+        """`on_row(ligne)` : émetteur courant changé (onglet Antennes)."""
         super().__init__(parent)
         self._on_change = on_change
         self._on_pick = on_pick
@@ -297,13 +305,16 @@ class SiteTable(QWidget):
         self.table.horizontalHeaderItem(5).setToolTip(tr("Modèle d'antenne (diagramme de rayonnement) ; "
                                                       "utilisé par SPLAT! en mode -L et point à point"))
         self._antenna_names = antennas.library_names()
-        # Colonnes d'antenne masquées (panneau étroit) : édition dans l'onglet Antenne.
+        # Colonnes d'antenne masquées (panneau étroit) : édition dans l'onglet Antennes.
         for col in (5, 6, 7):
             self.table.setColumnHidden(col, True)
         self.table.currentCellChanged.connect(lambda row, *_: self._on_row(row))
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setMinimumHeight(140)
+        # Hauteur de 4 lignes (au-delà : défilement) : le tableau n'occupe pas tout l'onglet.
+        self.table.setFixedHeight(self.table.horizontalHeader().sizeHint().height()
+                                  + 4 * self.table.verticalHeader().defaultSectionSize()
+                                  + 2 * self.table.frameWidth())
         self.table.itemChanged.connect(lambda _item: self._on_change())
 
         buttons = QGridLayout()
@@ -342,7 +353,7 @@ class SiteTable(QWidget):
             combo.setCurrentIndex(index)
         combo.blockSignals(False)
 
-    # ---- Antenne des émetteurs (édition dans l'onglet Antenne) ----
+    # ---- Antenne des émetteurs (édition dans l'onglet Antennes) ----
 
     def names(self):
         return [self.table.item(row, 0).text() if self.table.item(row, 0) else ""
@@ -520,7 +531,8 @@ class SettingsDialog(QDialog):
             "x64 : msys-2.0.dll, msys-stdc++-6.dll, msys-gcc_s-seh-1.dll (MSYS2, C:\\msys64\\usr\\bin) "
             "+ gnuplot (C:\\msys64\\mingw64\\bin).\n"
             "x86 : libstdc++-6.dll, libgcc_s_dw2-1.dll, libbz2-2.dll (MinGW 32 bits).\n"
-            "Fichier → Pré-requis… télécharge ces DLL dans deps\\<arch> et ajoute ce dossier ici."))
+            "Fichier → Pré-requis… télécharge ces DLL dans deps\\<arch>, ainsi que gnuplot, "
+            "et ajoute leurs dossiers ici."))
         info.setWordWrap(True)
         form.addRow(info)
         for arch in splat.ARCHES:
@@ -603,12 +615,13 @@ class SettingsDialog(QDialog):
 # --- Installation des pré-requis ---------------------------------------------------
 
 class PrereqDialog(QDialog):
-    """État et installation des exécutables SPLAT! (archive locale ou URL) et des DLL."""
+    """État et installation des exécutables SPLAT! (archive locale ou URL), des DLL et de gnuplot."""
 
     ARCHIVE_FILTER = N_("Archives (*.zip *.tar.gz *.tgz *.tar.bz2 *.tar.xz);;Tous les fichiers (*)")
 
-    def __init__(self, settings, parent=None, auto_dlls=()):
-        """`auto_dlls` : architectures dont les DLL sont téléchargées dès l'ouverture."""
+    def __init__(self, settings, parent=None, auto_dlls=(), auto_gnuplot=False):
+        """`auto_dlls` : architectures dont les DLL sont téléchargées dès l'ouverture ;
+        `auto_gnuplot` : gnuplot aussi."""
         super().__init__(parent)
         self.setWindowTitle(tr("Pré-requis"))
         self.resize(760, 520)
@@ -642,6 +655,18 @@ class PrereqDialog(QDialog):
         splat_layout.addWidget(self.archive_button)
         splat_layout.addWidget(self.url_button)
 
+        gnuplot_box = QGroupBox(tr("gnuplot (graphes point à point)"))
+        gnuplot_layout = QHBoxLayout(gnuplot_box)
+        self.gnuplot_label = QLabel()
+        self.gnuplot_label.setWordWrap(True)
+        self.gnuplot_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        gnuplot_layout.addWidget(self.gnuplot_label, 1)
+        self.gnuplot_button = QPushButton(tr("Télécharger gnuplot {version}", version=prereqs.GNUPLOT_VERSION))
+        self.gnuplot_button.setToolTip(tr("Distribution Windows 64 bits officielle (archive d'environ 70 Mo), "
+                                          "installée dans {folder}", folder=prereqs.GNUPLOT_DIR))
+        self.gnuplot_button.clicked.connect(self._install_gnuplot)
+        gnuplot_layout.addWidget(self.gnuplot_button)
+
         self.log_view = QPlainTextEdit()
         self.log_view.setReadOnly(True)
         self.log_view.setFont(mono_font())
@@ -656,11 +681,12 @@ class PrereqDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(status)
         layout.addWidget(splat_box)
+        layout.addWidget(gnuplot_box)
         layout.addWidget(self.log_view, 1)
         layout.addWidget(buttons)
         self._refresh()
-        if auto_dlls:
-            QTimer.singleShot(0, lambda: self._install_dlls(*auto_dlls))
+        if auto_dlls or auto_gnuplot:
+            QTimer.singleShot(0, lambda: self._install_missing(auto_dlls, auto_gnuplot))
 
     def _refresh(self):
         self.report = prereqs.check(self.settings["extra_paths"])
@@ -674,9 +700,18 @@ class PrereqDialog(QDialog):
                                          f"<span style='color:#c0392b'>{tr('manquantes :')} "
                                          + ", ".join(state["missing"]) + "</span>"))
             label.setText("<br>".join(parts))
+        found = {arch: state["gnuplot"] for arch, state in self.report.items()}
+        if all(found.values()):
+            paths = sorted({str(path) for path in found.values()})
+            self.gnuplot_label.setText(f"<span style='color:#1e8449'>{tr('trouvé')}</span> : " + ", ".join(paths))
+        else:
+            missing = ", ".join(arch for arch, path in found.items() if not path)
+            self.gnuplot_label.setText(f"<span style='color:#c0392b'>{tr('absent')}</span> "
+                                       + tr("(PATH {arches})", arches=missing))
 
     def _set_busy(self, busy):
-        for button in (*self.dll_buttons.values(), self.archive_button, self.url_button, self.close_button):
+        for button in (*self.dll_buttons.values(), self.archive_button, self.url_button, self.gnuplot_button,
+                       self.close_button):
             button.setEnabled(not busy)
         self.cancel_button.setEnabled(busy)
 
@@ -708,20 +743,44 @@ class PrereqDialog(QDialog):
                 if any(prereqs.dll_dir(arch).glob("*.dll")):
                     extra = self.settings["extra_paths"].get(arch, "")
                     self.settings["extra_paths"][arch] = prereqs.add_to_path_setting(extra, arch)
+                if (prereqs.gnuplot_bin() / "gnuplot.exe").is_file():
+                    extra = self.settings["extra_paths"].get(arch, "")
+                    self.settings["extra_paths"][arch] = prereqs.add_gnuplot_to_path_setting(extra)
             storage.save_settings(self.settings)
             self._log(tr("Terminé.\n"))
         self._refresh()
         if not error and isinstance(result, dict):
-            # Exécutables SPLAT! installés : proposer les DLL qui leur manquent.
+            # Exécutables SPLAT! installés : proposer les DLL qui leur manquent, et gnuplot.
             pending = [arch for arch in result if self.report.get(arch, {}).get("missing")]
-            if pending and QMessageBox.question(
-                    self, tr("Pré-requis"), tr("DLL manquantes pour {arches}. Les télécharger maintenant ?", arches=", ".join(pending))) \
+            gnuplot = bool(prereqs.gnuplot_missing(self.report))
+            missing = ([tr("DLL manquantes pour {arches}.", arches=", ".join(pending))] if pending else []) \
+                + ([tr("gnuplot absent.")] if gnuplot else [])
+            if missing and QMessageBox.question(
+                    self, tr("Pré-requis"), " ".join(missing) + " " + tr("Les télécharger maintenant ?")) \
                     == QMessageBox.StandardButton.Yes:
-                self._install_dlls(*pending)
+                self._install_missing(pending, gnuplot)
 
     def _install_dlls(self, *arches):
         self._start("DLL " + ", ".join(arches),
                     lambda log, cancel: [dll for arch in arches for dll in prereqs.install_dlls(arch, log, cancel)])
+
+    def _install_missing(self, arches, gnuplot):
+        """DLL de `arches` puis, si `gnuplot`, gnuplot, en un seul téléchargement suivi."""
+        if not gnuplot:
+            self._install_dlls(*arches)
+        elif not arches:
+            self._start("gnuplot " + prereqs.GNUPLOT_VERSION, prereqs.install_gnuplot)
+        else:
+            self._start("DLL " + ", ".join(arches) + " + gnuplot " + prereqs.GNUPLOT_VERSION,
+                        lambda log, cancel: [*(dll for arch in arches for dll in prereqs.install_dlls(arch, log, cancel)),
+                                             prereqs.install_gnuplot(log, cancel)])
+
+    def _install_gnuplot(self):
+        if prereqs.GNUPLOT_DIR.exists() and QMessageBox.question(
+                self, tr("Pré-requis"), tr("gnuplot est déjà installé dans {folder}. Le remplacer ?",
+                                           folder=prereqs.GNUPLOT_DIR)) != QMessageBox.StandardButton.Yes:
+            return
+        self._start("gnuplot " + prereqs.GNUPLOT_VERSION, prereqs.install_gnuplot)
 
     def _confirm_replace(self):
         existing = [p for arch in splat.ARCHES for p in prereqs.installed_executables(arch)
@@ -890,7 +949,8 @@ class MainWindow(QMainWindow):
         file_menu.addAction(tr("Ouvrir le dossier des résultats"), self.open_runs_dir)
         file_menu.addAction(tr("Modèles d'antennes…"), self.manage_antennas)
         file_menu.addAction(tr("Réglages…"), self.edit_settings)
-        file_menu.addAction(tr("Pré-requis (SPLAT!, DLL)…"), self.manage_prereqs)
+        file_menu.addAction(tr("Autres données d'entrée…"), self.show_input_dialog)
+        file_menu.addAction(tr("Pré-requis (SPLAT!, DLL, gnuplot)…"), self.manage_prereqs)
         file_menu.addSeparator()
         file_menu.addAction(tr("Quitter"), self.close)
 
@@ -980,14 +1040,16 @@ class MainWindow(QMainWindow):
 
     def _build_params_panel(self):
         tabs = QTabWidget()
-        tabs.addTab(scrollable(self._build_sites_tab()), tr("Sites"))
-        tabs.addTab(scrollable(self._build_antenna_tab()), tr("Antenne"))
-        tabs.addTab(scrollable(self._build_lrp_tab()), tr("Propagation"))
+        tabs.addTab(scrollable(self._build_analysis_tab()), tr("Analyse"))
+        tabs.addTab(scrollable(self._build_tx_tab()), tr("Émetteurs"))
+        tabs.addTab(scrollable(self._build_rx_tab()), tr("Récepteur"))
+        tabs.addTab(scrollable(self._build_antenna_tab()), tr("Antennes"))
         tabs.addTab(scrollable(self._build_options_tab()), tr("Options"))
         tabs.addTab(scrollable(self._build_files_tab()), tr("Sorties"))
-        for index, tip in enumerate((N_("Sites et mode d'analyse"),
-                                     N_("Système antennaire des émetteurs (modèle, orientation, PAR)"),
-                                     N_("Paramètres de propagation (LRP)"), N_("Options de SPLAT!"),
+        for index, tip in enumerate((N_("Mode d'analyse, unités et propagation"), N_("Sites émetteurs (-t) et calcul de la PAR"),
+                                     N_("Site récepteur (-r), mode point à point"),
+                                     N_("Système antennaire des émetteurs (modèle, orientation)"),
+                                     N_("Options de SPLAT!"),
                                      N_("Sorties et fichiers"))):
             tabs.setTabToolTip(index, tr(tip))
 
@@ -1004,7 +1066,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.preview)
         return panel
 
-    def _build_sites_tab(self):
+    def _build_analysis_tab(self):
         page = QWidget()
         layout = QVBoxLayout(page)
 
@@ -1028,17 +1090,36 @@ class MainWindow(QMainWindow):
         mode_layout.addWidget(self.rx_height, 3, 1)
         mode_layout.addWidget(self.metric, 4, 0, 1, 2)
         layout.addWidget(mode_box)
+        layout.addWidget(self._build_lrp_box())
+        layout.addStretch()
+        return page
+
+    def _coordinates_note(self):
+        note = QLabel(tr("Longitudes : convention usuelle (Est positif, Ouest négatif). "
+                      "La conversion vers la convention SPLAT! (Ouest positif) est automatique. "
+                      "Les coordonnées acceptent le format décimal ou « degrés minutes secondes »."))
+        note.setWordWrap(True)
+        note.setStyleSheet("color: gray;")
+        return note
+
+    def _build_tx_tab(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
 
         tx_box = QGroupBox(tr("Émetteurs (-t)"))
         tx_box.setToolTip(tr("4 émetteurs au plus en couverture (-c), 30 en perte de trajet (-L)"))
         tx_layout = QVBoxLayout(tx_box)
         self.tx_table = SiteTable(self.changed, self._pick_tx, on_row=self._antenna_row_changed)
         tx_layout.addWidget(self.tx_table)
-        antenna_note = QLabel(tr("Antenne, orientation et PAR de chaque émetteur : onglet Antenne."))
-        antenna_note.setStyleSheet("color: gray;")
-        antenna_note.setWordWrap(True)
-        tx_layout.addWidget(antenna_note)
         layout.addWidget(tx_box)
+        layout.addWidget(self._coordinates_note())
+        layout.addWidget(self._build_erp_box())
+        layout.addStretch()
+        return page
+
+    def _build_rx_tab(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
 
         self.rx_box = QGroupBox(tr("Récepteur (-r) — mode point à point"))
         rx_layout = QVBoxLayout(self.rx_box)
@@ -1055,13 +1136,7 @@ class MainWindow(QMainWindow):
         rx_buttons.addStretch()
         rx_layout.addLayout(rx_buttons)
         layout.addWidget(self.rx_box)
-
-        note = QLabel(tr("Longitudes : convention usuelle (Est positif, Ouest négatif). "
-                      "La conversion vers la convention SPLAT! (Ouest positif) est automatique. "
-                      "Les coordonnées acceptent le format décimal ou « degrés minutes secondes »."))
-        note.setWordWrap(True)
-        note.setStyleSheet("color: gray;")
-        layout.addWidget(note)
+        layout.addWidget(self._coordinates_note())
         layout.addStretch()
         return page
 
@@ -1072,10 +1147,10 @@ class MainWindow(QMainWindow):
         tx_box = QGroupBox(tr("Émetteur"))
         tx_layout = QVBoxLayout(tx_box)
         self.antenna_tx_combo = QComboBox()
-        self.antenna_tx_combo.setToolTip(tr("Émetteur dont le système antennaire est affiché (onglet Sites)"))
+        self.antenna_tx_combo.setToolTip(tr("Émetteur dont le système antennaire est affiché (onglet Émetteurs)"))
         self.antenna_tx_combo.currentIndexChanged.connect(self._antenna_tx_selected)
         tx_layout.addWidget(self.antenna_tx_combo)
-        self.antenna_empty = QLabel(tr("Aucun émetteur : ajoutez-en un dans l'onglet Sites."))
+        self.antenna_empty = QLabel(tr("Aucun émetteur : ajoutez-en un dans l'onglet Émetteurs."))
         self.antenna_empty.setStyleSheet("color: gray;")
         tx_layout.addWidget(self.antenna_empty)
         layout.addWidget(tx_box)
@@ -1122,7 +1197,6 @@ class MainWindow(QMainWindow):
             plot.setMaximumHeight(240)
             plots_layout.addWidget(plot)
         layout.addWidget(plots_box)
-        layout.addWidget(self._build_erp_box())
 
         buttons = QHBoxLayout()
         manage = QPushButton(tr("Modèles d'antennes…"))
@@ -1153,7 +1227,7 @@ class MainWindow(QMainWindow):
             self.erp_cable.addItem(name, name)
         self.erp_cable.addItem(tr("Personnalisé"), cables.CUSTOM)
         self.erp_cable.setToolTip(tr("Affaiblissement typique des fiches constructeurs, interpolé à la fréquence "
-                                     "de l'onglet Propagation ; « Personnalisé » pour saisir la valeur exacte"))
+                                     "de l'onglet Analyse ; « Personnalisé » pour saisir la valeur exacte"))
         self.erp_attenuation = spin(0, 1000, 2, 0.1, " dB/100 m")
         self.erp_attenuation.setToolTip(tr("Affaiblissement linéique du câble à la fréquence de calcul"))
         self.erp_length = spin(0, 100000, 1, 1, " m")
@@ -1181,7 +1255,7 @@ class MainWindow(QMainWindow):
         self.erp_result.setWordWrap(True)
         self.erp_result.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         form.addRow(self.erp_result)
-        apply_button = QPushButton(tr("Reporter la PAR dans l'onglet Propagation"))
+        apply_button = QPushButton(tr("Reporter la PAR dans l'onglet Analyse"))
         apply_button.setToolTip(tr("PAR utilisée par SPLAT! (fichiers .lrp)"))
         apply_button.clicked.connect(self._apply_erp)
         form.addRow(apply_button)
@@ -1236,7 +1310,7 @@ class MainWindow(QMainWindow):
             gain_note += "<br>"
         self.erp_result.setText(
             gain_note
-            + tr("À {frequency:g} MHz (onglet Propagation) : câble {cable:.2f} dB, pertes totales {total:.2f} dB",
+            + tr("À {frequency:g} MHz (onglet Analyse) : câble {cable:.2f} dB, pertes totales {total:.2f} dB",
                  frequency=frequency, cable=cable_loss, total=total)
             + "<br><b>" + tr("PAR : {erp:.3g} W ({dbm:.2f} dBm)", erp=erp_w, dbm=erp_dbm) + "</b> — "
             + tr("PIRE : {eirp:.2f} dBm", eirp=eirp_dbm))
@@ -1245,7 +1319,7 @@ class MainWindow(QMainWindow):
         erp_w = self._erp_values()[4]
         self.lrp_fields["erp"].setValue(round(erp_w, 3))
         self.lrp_enabled.setChecked(True)
-        self.statusBar().showMessage(tr("PAR de {erp:.3f} W reportée dans l'onglet Propagation", erp=erp_w), 6000)
+        self.statusBar().showMessage(tr("PAR de {erp:.3f} W reportée dans l'onglet Analyse", erp=erp_w), 6000)
 
     def _refresh_antenna_tab(self):
         """Liste des émetteurs (noms à jour) et éditeur de l'émetteur courant."""
@@ -1331,17 +1405,19 @@ class MainWindow(QMainWindow):
         for row in range(len(self.tx_table.names())):
             self.tx_table.set_antenna(row, *values)
 
-    def _build_lrp_tab(self):
-        page = QWidget()
-        layout = QVBoxLayout(page)
+    def _build_lrp_box(self):
+        """Paramètres de propagation (fichier .lrp), affichés dans l'onglet Analyse."""
+        group = QGroupBox(tr("Propagation (modèle ITM / ITWOM)"))
+        layout = QVBoxLayout(group)
         self.lrp_enabled = QCheckBox(tr("Fichier .lrp par émetteur"))
         self.lrp_enabled.setToolTip(tr("Écrit les paramètres ci-dessous dans un fichier .lrp pour chaque "
                                     "émetteur (sinon SPLAT! utilise ses valeurs par défaut)"))
         self.lrp_enabled.toggled.connect(self.changed)
         layout.addWidget(self.lrp_enabled)
 
-        box = QGroupBox(tr("Paramètres du modèle ITM / ITWOM"))
+        box = QWidget()
         form = QFormLayout(box)
+        form.setContentsMargins(0, 0, 0, 0)
         self.ground = QComboBox()
         self.ground.addItem(tr("— Type de sol (préréglage) —"))
         for name, (eps, sigma) in splat.GROUNDS.items():
@@ -1395,8 +1471,7 @@ class MainWindow(QMainWindow):
         buttons.addWidget(save)
         buttons.addStretch()
         layout.addLayout(buttons)
-        layout.addStretch()
-        return page
+        return group
 
     def _build_options_tab(self):
         page = QWidget()
@@ -1447,7 +1522,7 @@ class MainWindow(QMainWindow):
         map_row.addWidget(self.map_name, 1)
         map_row.addWidget(QLabel(".ppm"))
         form.addRow(tr("Carte topographique (-o)"), map_row)
-        aspect_row = QVBoxLayout()
+        aspect_row = QHBoxLayout()
         self.map_aspect_file = QCheckBox(tr("Carte aux bonnes proportions"))
         self.map_aspect_file.setToolTip(
             tr("SPLAT! trace un degré de longitude aussi large qu'un degré de latitude, ce qui étire "
@@ -1459,12 +1534,15 @@ class MainWindow(QMainWindow):
         self.map_aspect_format.addItem(tr("<carte>_proportions.ppm (+ .geo)"), "ppm")
         self.map_aspect_format.addItem(tr("<carte>_proportions.png (+ .pgw)"), "png")
         self.map_aspect_format.addItem(tr("PPM et PNG"), "ppm+png")
+        # Sur la ligne de la case à cocher : la liste peut rétrécir si le panneau est étroit.
+        self.map_aspect_format.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.map_aspect_format.setMinimumContentsLength(12)
         self.map_aspect_file.toggled.connect(self.changed)
         self.map_aspect_format.currentIndexChanged.connect(self.changed)
         self.map_enabled.toggled.connect(self.map_aspect_file.setEnabled)
         self.map_enabled.toggled.connect(self.map_aspect_format.setEnabled)
         aspect_row.addWidget(self.map_aspect_file)
-        aspect_row.addWidget(self.map_aspect_format)
+        aspect_row.addWidget(self.map_aspect_format, 1)
         form.addRow(tr("Copie corrigée"), aspect_row)
         self.graph_checks = {}
         graphs_widget = QWidget()
@@ -1475,7 +1553,7 @@ class MainWindow(QMainWindow):
             check.toggled.connect(self.changed)
             graphs_layout.addWidget(check, i // 2, i % 2)
             self.graph_checks[key] = check
-        form.addRow(tr("Graphes point à point\n(nécessite gnuplot)"), graphs_widget)
+        form.addRow(tr("Graphes point à point (nécessite gnuplot)"), graphs_widget)
         self.graph_format = QComboBox()
         self.graph_format.addItems(["png", "jpg", "gif", "svg", "ps", "pdf"])
         self.graph_format.currentIndexChanged.connect(self.changed)
@@ -1518,6 +1596,50 @@ class MainWindow(QMainWindow):
         relief.addWidget(open_terrain, 0, Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(relief_box)
 
+        disk_box = QGroupBox(tr("Espace disque"))
+        disk = QHBoxLayout(disk_box)
+        self.disk_usage = QLabel()
+        self.disk_usage.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.disk_usage.setWordWrap(True)         # une ligne, sauf si le panneau est trop étroit
+        disk.addWidget(self.disk_usage, 1)
+        refresh = QPushButton(tr("Actualiser"))
+        refresh.clicked.connect(self._update_disk_usage)
+        disk.addWidget(refresh)
+        self.sdf_dir.changed.connect(self._update_disk_usage)
+        layout.addWidget(disk_box)
+        layout.addStretch()
+        self._update_disk_usage()
+        self._build_input_dialog()
+        return page
+
+    def _update_disk_usage(self, *_args):
+        """Une ligne : taille des tuiles SRTM et des fichiers SDF, espace libre du ou des lecteurs.
+        Dossiers et nombres de fichiers en infobulle."""
+        sdf_dir = Path(self.sdf_dir.text().strip() or terrain.SDF_DIR)
+        parts, details = [], []
+        for name, folder, suffixes in (("SRTM", terrain.SRTM_DIR, terrain.SRTM_SUFFIXES),
+                                       ("SDF", sdf_dir, (".sdf",))):
+            count, size = terrain.folder_usage(folder, suffixes)
+            parts.append(tr("{name} : {size}", name=name, size=format_size(size)))
+            details.append(tr("{name} : {n} fichier(s) dans {folder}", name=name, n=count, folder=folder))
+        drives = {}
+        for folder in (terrain.SRTM_DIR, sdf_dir):
+            space = terrain.disk_space(folder)
+            if space:
+                drives.setdefault(space[0].upper(), space)
+        free = ", ".join(f"{format_size(free)} ({drive.rstrip(chr(92))})" for drive, free, _total in drives.values())
+        parts.append(tr("libre : {free}", free=free or tr("inconnu")))
+        details += [tr("{drive} : {free} libres sur {total}", drive=drive, free=format_size(free),
+                       total=format_size(total)) for drive, free, total in drives.values()]
+        self.disk_usage.setText("  ·  ".join(parts))
+        self.disk_usage.setToolTip("\n".join(details))
+
+    def _build_input_dialog(self):
+        """Fenêtre « Autres données d'entrée » (menu Fichier) : paramètres du profil, conservés
+        d'une ouverture à l'autre."""
+        self.input_dialog = QDialog(self)
+        self.input_dialog.setWindowTitle(tr("Autres données d'entrée"))
+        self.input_dialog.resize(560, 0)
         in_box = QGroupBox(tr("Autres données d'entrée"))
         form = QFormLayout(in_box)
         self.city_files = FileList(5)
@@ -1532,9 +1654,16 @@ class MainWindow(QMainWindow):
         self.ani = PathEdit()
         self.ani.changed.connect(self.changed)
         form.addRow(tr("Fichier alphanumérique d'entrée (-ani)"), self.ani)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(self.input_dialog.reject)
+        layout = QVBoxLayout(self.input_dialog)
         layout.addWidget(in_box)
-        layout.addStretch()
-        return page
+        layout.addWidget(buttons)
+
+    def show_input_dialog(self):
+        self.input_dialog.show()
+        self.input_dialog.raise_()
+        self.input_dialog.activateWindow()
 
     def _build_results_panel(self):
         self.results_tabs = QTabWidget()
@@ -1752,7 +1881,7 @@ class MainWindow(QMainWindow):
             self._preview_timer.start()
 
     def _refresh_state(self):
-        self._refresh_antenna_tab()      # noms des émetteurs modifiés dans l'onglet Sites
+        self._refresh_antenna_tab()      # noms des émetteurs modifiés dans l'onglet Émetteurs
         try:
             params = self.get_params()
         except splat.ParamError as exc:
@@ -2293,6 +2422,7 @@ class MainWindow(QMainWindow):
         self._set_progress(min(value, 0.995), label)
 
     def _finalize(self, result, switch_tab=True):
+        self._update_disk_usage()                # relief éventuellement téléchargé et converti
         if self.run_params and self.run_params["map_aspect_file"] and self.run_dir:
             formats = self.run_params["map_aspect_format"].split("+")
             run_sites = sites.run_sites(self.run_dir)
@@ -3428,15 +3558,19 @@ class MainWindow(QMainWindow):
             return
         lines = ["• " + tr("DLL {arch} manquantes : {dlls}", arch=arch, dlls=", ".join(state["missing"]))
                  for arch, state in report.items() if state["splat"] and state["missing"]]
+        gnuplot = bool(prereqs.gnuplot_missing(report))
+        if gnuplot:
+            lines.append("• " + tr("gnuplot absent (graphes point à point)"))
         if not any(state["splat"] for state in report.values()):
             lines.append("• " + tr("Exécutables SPLAT! absents de bin\\x64 et bin\\x86 : ils s'installent depuis "
                                    "une archive (fichier ou URL), puis les DLL nécessaires sont proposées."))
         auto = [arch for arch, state in report.items() if state["splat"] and state["missing"]]
-        question = tr("Télécharger maintenant les DLL manquantes ?") if auto else tr("Ouvrir la fenêtre des pré-requis ?")
+        question = (tr("Télécharger maintenant les dépendances manquantes ?") if auto or gnuplot
+                    else tr("Ouvrir la fenêtre des pré-requis ?"))
         if QMessageBox.question(self, tr("Premier démarrage"),
                                 tr("Des dépendances de SPLAT! sont absentes :") + "\n\n" + "\n".join(lines)
                                 + f"\n\n{question}") == QMessageBox.StandardButton.Yes:
-            PrereqDialog(self.settings, self, auto_dlls=auto).exec()
+            PrereqDialog(self.settings, self, auto_dlls=auto, auto_gnuplot=gnuplot).exec()
             self._show_prereq_status(prereqs.check(self.settings["extra_paths"]))
             self._refresh_state()
 
