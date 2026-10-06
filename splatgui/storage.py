@@ -92,6 +92,10 @@ def default_params():
         "graph_format": "png",
         "sdf_dir": "",              # vide = dossier du relief de l'application
         "auto_terrain": True,       # télécharger/convertir les tuiles SRTM manquantes
+        "relief_source": "srtm",    # srtm | copernicus | ign (dem.SOURCES)
+        "clutter": {                # sursol d'après l'occupation du sol (ESA WorldCover), en m
+            "enabled": False, "trees": 15.0, "built": 10.0, "shrubs": 2.0,
+        },
         "city_files": [],
         "boundary_files": [],
         "udt": "",

@@ -257,7 +257,7 @@ def convert(tile, srtm_path, hd, sdf_dir, converters, log, cancel):
                     # devient U+F03A. SPLAT! cherche « 48_49_357_358.sdf ».
                     clean = path.name.replace("", "_").replace(":", "_")
                     target = Path(sdf_dir) / clean
-                    os.replace(path, target)
+                    shutil.move(path, target)          # dossier SDF éventuellement sur un autre lecteur
                 return target
             output = (proc.stdout + proc.stderr).decode("latin-1", "replace").strip()
             errors.append(f"{label} : code {proc.returncode:#x} {output[-200:]}")

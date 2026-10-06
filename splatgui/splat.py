@@ -14,7 +14,7 @@ import struct
 import unicodedata
 from pathlib import Path
 
-from . import antennas, terrain
+from . import antennas, dem, terrain
 from .storage import BIN_DIR, PROJECT_DIR
 from .i18n import N_, tr
 
@@ -286,11 +286,12 @@ def _fwd(path):
 
 def effective_sdf_dir(params):
     """Dossier SDF passé à -d : celui choisi par l'utilisateur, sinon celui de l'application
-    lorsque la gestion automatique du relief est active (sinon aucun)."""
+    lorsque la gestion automatique du relief est active (sinon aucun). Les SDF produits par
+    dem.py (autre source que le SRTM, ou sursol) ont un dossier par configuration."""
     if params["sdf_dir"].strip():
         return params["sdf_dir"].strip()
     if params.get("auto_terrain"):
-        return str(terrain.SDF_DIR)
+        return str(dem.sdf_dir_for(params) if dem.uses_dem(params) else terrain.SDF_DIR)
     return ""
 
 

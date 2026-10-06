@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
 )
 
 from . import (
-    CREDITS, LICENSE_SHORT, SOURCE_URL, __version__, antenna_ui, antennas, basemap, cables, hillshade, i18n, layers, layout, livemap, mappicker, prereqs,
+    CREDITS, LICENSE_SHORT, SOURCE_URL, __version__, antenna_ui, antennas, basemap, cables, dem, help, hillshade, i18n, layers, layout, linkprofile, livemap, mappicker, prereqs,
     sites, splat, storage, terrain, themes,
 )
 from .widgets import FileList, ImageView, PathEdit, SliderValue, graduate
@@ -140,19 +140,18 @@ class TerrainWorker(QThread):
     progress = pyqtSignal(int, int)   # tuiles traitées, total
     done = pyqtSignal(object)   # résumé (dict) ou None si annulé
 
-    def __init__(self, tiles, hd, sdf_dir, converters, url, parent=None):
+    def __init__(self, function, parent=None):
+        """`function(log, cancel, progress)` prépare le relief et renvoie un résumé (dict)."""
         super().__init__(parent)
-        self._args = (tiles, hd, sdf_dir, converters, url)
+        self._function = function
         self._cancelled = False
 
     def cancel(self):
         self._cancelled = True
 
     def run(self):
-        tiles, hd, sdf_dir, converters, url = self._args
         try:
-            summary = terrain.ensure_tiles(tiles, hd, sdf_dir, converters, url, self.log.emit,
-                                           cancel=lambda: self._cancelled, progress=self.progress.emit)
+            summary = self._function(self.log.emit, lambda: self._cancelled, self.progress.emit)
         except terrain.Cancelled:
             summary = None
         except Exception as exc:  # erreur inattendue : on la journalise et on continue sans relief
@@ -655,7 +654,7 @@ class PrereqDialog(QDialog):
         splat_layout.addWidget(self.archive_button)
         splat_layout.addWidget(self.url_button)
 
-        gnuplot_box = QGroupBox(tr("gnuplot (graphes point à point)"))
+        gnuplot_box = QGroupBox(tr("gnuplot (facultatif : graphes de SPLAT! -p, -e, -h, -H, -l)"))
         gnuplot_layout = QHBoxLayout(gnuplot_box)
         self.gnuplot_label = QLabel()
         self.gnuplot_label.setWordWrap(True)
@@ -828,10 +827,12 @@ class MainWindow(QMainWindow):
         self.process = None
         self.run_dir = None
         self.run_started = None
+        self.help_window = None       # aide intégrée, créée à la première ouverture
         self.run_params = None
         self.run_spec = None
         self.terrain_worker = None
         self.terrain_retried = False
+        self.site_tiles = []          # tuiles corrigées (sursol) écrites dans le dossier du calcul
         self.pending_result = ""
         self.splat_output = ""
         self._loading = False
@@ -973,9 +974,9 @@ class MainWindow(QMainWindow):
             group.addAction(action)
 
         help_menu = menu.addMenu(tr("&Aide"))
-        for lang, label in (("english", N_("Documentation SPLAT! (anglais)")),
-                            ("spanish", N_("Documentation SPLAT! (espagnol)"))):
-            help_menu.addAction(tr(label), lambda l=lang: self._open_doc(l))
+        help_action = help_menu.addAction(tr("Aide de SPLAT!…"), self.show_help)
+        help_action.setShortcut(QKeySequence.StandardKey.HelpContents)
+        help_menu.addAction(tr("Rechercher dans l'aide…"), lambda: self.show_help(search=True))
         help_menu.addSeparator()
         help_menu.addAction(tr("Licence (GNU GPL v2)…"), self.show_license)
         help_menu.addAction(tr("À propos"), self.show_about)
@@ -1570,11 +1571,45 @@ class MainWindow(QMainWindow):
 
         relief_box = QGroupBox(tr("Relief (fichiers SDF)"))
         relief = QVBoxLayout(relief_box)
-        self.auto_terrain = QCheckBox(tr("Télécharger et convertir le relief SRTM manquant"))
-        self.auto_terrain.setToolTip(tr("Télécharge les tuiles SRTM manquantes et les convertit en SDF "
-                                     "avec srtm2sdf"))
+        self.auto_terrain = QCheckBox(tr("Télécharger et préparer le relief manquant"))
+        self.auto_terrain.setToolTip(tr("Télécharge les tuiles de relief manquantes (source ci-dessous) "
+                                     "et les convertit en fichiers SDF"))
         self.auto_terrain.toggled.connect(self.changed)
         relief.addWidget(self.auto_terrain)
+        source_row = QHBoxLayout()
+        source_row.addWidget(QLabel(tr("Source du relief :")))
+        self.relief_source_combo = QComboBox()
+        for key, label in dem.SOURCES.items():
+            self.relief_source_combo.addItem(tr(label), key)
+        self.relief_source_combo.setToolTip(tr(
+            "SRTM : relief mondial historique (converti par srtm2sdf).\n"
+            "Copernicus GLO-30 : relief mondial plus récent et plus précis ; modèle de surface "
+            "(inclut en partie arbres et bâtiments).\n"
+            "IGN RGE ALTO : relief de la France au sol nu, le plus précis ; hors de France, "
+            "complété par Copernicus."))
+        self.relief_source_combo.currentIndexChanged.connect(self.changed)
+        source_row.addWidget(self.relief_source_combo, 1)
+        relief.addLayout(source_row)
+        self.clutter_check = QCheckBox(tr("Ajouter le sursol (occupation du sol ESA WorldCover)"))
+        self.clutter_check.setToolTip(tr(
+            "Ajoute au relief la hauteur des arbres, du bâti et des arbustes d'après la carte "
+            "d'occupation du sol ESA WorldCover (10 m). À l'emplacement des sites, le relief reste "
+            "au sol nu : la hauteur d'antenne se compte depuis le sol.\n"
+            "Conseillé avec l'IGN (sol nu) ; SRTM et Copernicus incluent déjà une partie du sursol."))
+        self.clutter_check.toggled.connect(self.changed)
+        relief.addWidget(self.clutter_check)
+        clutter_row = QHBoxLayout()
+        clutter_row.setContentsMargins(20, 0, 0, 0)
+        self.clutter_heights = {}
+        for key, label in (("trees", N_("Arbres")), ("built", N_("Bâti")), ("shrubs", N_("Arbustes"))):
+            box = spin(0, 100, 1, 1.0, " m")
+            box.valueChanged.connect(self.changed)
+            clutter_row.addWidget(QLabel(tr(label)))
+            clutter_row.addWidget(box)
+            self.clutter_heights[key] = box
+        clutter_row.addStretch()
+        relief.addLayout(clutter_row)
+        self.clutter_check.toggled.connect(lambda on: [b.setEnabled(on) for b in self.clutter_heights.values()])
         sdf_row = QVBoxLayout()
         sdf_row.addWidget(QLabel(tr("Dossier SDF (-d) :")))
         self.sdf_dir = PathEdit(directory=True)
@@ -1613,17 +1648,29 @@ class MainWindow(QMainWindow):
         return page
 
     def _update_disk_usage(self, *_args):
-        """Une ligne : taille des tuiles SRTM et des fichiers SDF, espace libre du ou des lecteurs.
-        Dossiers et nombres de fichiers en infobulle."""
-        sdf_dir = Path(self.sdf_dir.text().strip() or terrain.SDF_DIR)
-        parts, details = [], []
-        for name, folder, suffixes in (("SRTM", terrain.SRTM_DIR, terrain.SRTM_SUFFIXES),
-                                       ("SDF", sdf_dir, (".sdf",))):
-            count, size = terrain.folder_usage(folder, suffixes)
+        """Une ligne : taille des tuiles SRTM, des caches Copernicus / IGN / WorldCover (s'ils
+        existent) et des fichiers SDF, espace libre du ou des lecteurs. Dossiers et nombres de
+        fichiers en infobulle."""
+        custom = self.sdf_dir.text().strip()
+        # SDF : dossier choisi, sinon celui du SRTM et ceux de chaque configuration de dem.py.
+        sdf_dirs = [Path(custom)] if custom else [terrain.SDF_DIR, *sorted(terrain.TERRAIN_DIR.glob("sdf-*"))]
+        groups = [("SRTM", [terrain.SRTM_DIR], terrain.SRTM_SUFFIXES, True),
+                  ("Copernicus", [dem.CACHE["copernicus"]], (".gz",), False),
+                  ("IGN", [dem.CACHE["ign"]], (".gz",), False),
+                  ("WorldCover", [dem.CACHE["worldcover"]], (".gz",), False),
+                  ("SDF", sdf_dirs, (".sdf",), True)]
+        parts, details, folders = [], [], []
+        for name, group_dirs, suffixes, always in groups:
+            usage = [(folder, *terrain.folder_usage(folder, suffixes)) for folder in group_dirs]
+            count, size = sum(u[1] for u in usage), sum(u[2] for u in usage)
+            if not (always or count):
+                continue
             parts.append(tr("{name} : {size}", name=name, size=format_size(size)))
-            details.append(tr("{name} : {n} fichier(s) dans {folder}", name=name, n=count, folder=folder))
+            details += [tr("{name} : {n} fichier(s) dans {folder}", name=name, n=n, folder=folder)
+                        for folder, n, _size in usage if n or always and folder == group_dirs[0]]
+            folders += group_dirs
         drives = {}
-        for folder in (terrain.SRTM_DIR, sdf_dir):
+        for folder in folders:
             space = terrain.disk_space(folder)
             if space:
                 drives.setdefault(space[0].upper(), space)
@@ -1731,6 +1778,32 @@ class MainWindow(QMainWindow):
         il.addLayout(bottom)
         self.results_tabs.addTab(images, tr("Cartes et graphes"))
 
+        # Profil de liaison (point à point), tracé par l'application
+        profile_page = QWidget()
+        pl = QVBoxLayout(profile_page)
+        top = QHBoxLayout()
+        self.profile_tx = QComboBox()
+        self.profile_tx.setToolTip(tr("Émetteur dont le profil est affiché"))
+        self.profile_tx.currentIndexChanged.connect(lambda _i: self._update_profile())
+        top.addWidget(self.profile_tx)
+        self.profile_summary = QLabel()
+        self.profile_summary.setWordWrap(True)
+        self.profile_summary.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        top.addWidget(self.profile_summary, 1)
+        export = QPushButton(tr("Exporter (PNG)…"))
+        export.clicked.connect(self._export_profile)
+        top.addWidget(export)
+        self.profile_view = linkprofile.ProfileView()
+        self.profile_hover = QLabel()
+        self.profile_view.hovered.connect(self.profile_hover.setText)
+        pl.addLayout(top)
+        pl.addWidget(self.profile_view, 1)
+        pl.addWidget(self.profile_hover)
+        self.profile_tab = self.results_tabs.addTab(profile_page, tr("Profil"))
+        self.profile_request = None          # (paramètres, dossier) du calcul point à point affiché
+        self.profile_data = []               # profils calculés, un par émetteur
+        self.results_tabs.currentChanged.connect(lambda _i: self._update_profile())
+
         # Fichiers
         files = QWidget()
         fl = QVBoxLayout(files)
@@ -1815,6 +1888,11 @@ class MainWindow(QMainWindow):
             self.log.setChecked(params["log"])
             self.sdf_dir.setText(params["sdf_dir"])
             self.auto_terrain.setChecked(params["auto_terrain"])
+            self.relief_source_combo.setCurrentIndex(max(0, self.relief_source_combo.findData(params["relief_source"])))
+            self.clutter_check.setChecked(bool(params["clutter"]["enabled"]))
+            for key, box in self.clutter_heights.items():
+                box.setValue(float(params["clutter"][key]))
+                box.setEnabled(bool(params["clutter"]["enabled"]))
             self.city_files.setFiles(params["city_files"])
             self.boundary_files.setFiles(params["boundary_files"])
             self.udt.setText(params["udt"])
@@ -1859,6 +1937,9 @@ class MainWindow(QMainWindow):
             "graph_format": self.graph_format.currentText(),
             "sdf_dir": self.sdf_dir.text().strip(),
             "auto_terrain": self.auto_terrain.isChecked(),
+            "relief_source": self.relief_source_combo.currentData(),
+            "clutter": {"enabled": self.clutter_check.isChecked(),
+                        **{key: box.value() for key, box in self.clutter_heights.items()}},
             "city_files": self.city_files.files(),
             "boundary_files": self.boundary_files.files(),
             "udt": self.udt.text().strip(),
@@ -2222,6 +2303,7 @@ class MainWindow(QMainWindow):
         self.run_params = params
         self.run_spec = (exe, args, env)
         self.terrain_retried = False
+        self.site_tiles = []          # tuiles corrigées (sursol) écrites dans le dossier du calcul
         self.run_started = datetime.datetime.now()
         self.history = storage.add_history({
             "date": self.run_started.strftime("%Y-%m-%d %H:%M:%S"),
@@ -2236,7 +2318,6 @@ class MainWindow(QMainWindow):
         self.console.clear()
         self._console_write(tr("Dossier : {folder}", folder=run_dir) + f"\n> {splat.command_preview(params)}\n\n")
         self._clear_results()
-        self.results_tabs.setCurrentIndex(0)
         self.run_action.setEnabled(False)
         self.stop_action.setEnabled(True)
 
@@ -2260,19 +2341,33 @@ class MainWindow(QMainWindow):
             callback(None)
             return
         sdf_dir = splat.effective_sdf_dir(params)
+        url = self.settings.get("srtm_url") or terrain.DEFAULT_URL
         self._console_write(tr("Relief {kind} : {n} tuile(s) ({tiles}) dans {folder}\n",
                                kind="HD" if hd else "standard", n=len(tiles), folder=sdf_dir,
                                tiles=", ".join(terrain.tile_name(*t) for t in tiles) or tr("aucune")))
-        converters = terrain.converter_candidates(params["arch"], self.settings["extra_paths"], hd)
-        self.terrain_worker = TerrainWorker(
-            tiles, hd, sdf_dir, converters, self.settings.get("srtm_url") or terrain.DEFAULT_URL, self)
+        if dem.uses_dem(params):
+            self._console_write(tr("Source : {source}\n", source=dem.describe(params)))
+            source, clutter, run_dir = params["relief_source"], params["clutter"], self.run_dir
+            run_sites = params["tx_sites"] + ([params["rx_site"]] if params["mode"] == "p2p" else [])
+
+            def prepare(log, cancel, progress):
+                summary = dem.ensure_tiles(tiles, hd, sdf_dir, source, clutter, url, log, cancel, progress)
+                # Sursol : tuiles des sites corrigées (sol nu sous les antennes), dans le dossier du calcul.
+                self.site_tiles += dem.write_site_tiles(run_dir, run_sites, hd, source, clutter, url, log)
+                return summary
+        else:
+            converters = terrain.converter_candidates(params["arch"], self.settings["extra_paths"], hd)
+
+            def prepare(log, cancel, progress):
+                return terrain.ensure_tiles(tiles, hd, sdf_dir, converters, url, log, cancel=cancel, progress=progress)
+        self.terrain_worker = TerrainWorker(prepare, self)
         self.terrain_worker.log.connect(self._console_write)
         self.terrain_worker.progress.connect(
             lambda n, total: self._set_progress(n / total if total else None, tr("Relief : {n}/{total} tuile(s)", n=n, total=total)))
         self._set_progress(0.0 if tiles else None, tr("Préparation du relief…"))
         self.terrain_worker.done.connect(lambda summary: self._terrain_done(summary, callback))
         self.terrain_worker.start()
-        self.statusBar().showMessage(tr("Préparation du relief (SRTM → SDF)…"))
+        self.statusBar().showMessage(tr("Préparation du relief…"))
 
     def _terrain_done(self, summary, callback):
         worker, self.terrain_worker = self.terrain_worker, None
@@ -2422,6 +2517,9 @@ class MainWindow(QMainWindow):
         self._set_progress(min(value, 0.995), label)
 
     def _finalize(self, result, switch_tab=True):
+        for path in self.site_tiles:             # copies de tuiles (sursol) : inutiles après le calcul
+            Path(path).unlink(missing_ok=True)
+        self.site_tiles = []
         self._update_disk_usage()                # relief éventuellement téléchargé et converti
         if self.run_params and self.run_params["map_aspect_file"] and self.run_dir:
             formats = self.run_params["map_aspect_format"].split("+")
@@ -2480,8 +2578,57 @@ class MainWindow(QMainWindow):
         log = self.run_dir / "console.log"
         if load_console and log.exists():
             self.console.setPlainText(log.read_text(encoding="utf-8", errors="replace"))
+        params = self._run_params_for(self.run_dir)
+        self.profile_request = (params, self.run_dir) if params and params["mode"] == "p2p" else None
+        self.profile_data = []
+        self.profile_tx.blockSignals(True)
+        self.profile_tx.clear()
+        for site in (params["tx_sites"] if self.profile_request else []):
+            self.profile_tx.addItem(site["name"])
+        self.profile_tx.blockSignals(False)
+        self.profile_tx.setVisible(self.profile_tx.count() > 1)
         if switch_tab:
-            self.results_tabs.setCurrentIndex(2 if images else 1 if texts else 0)
+            self.results_tabs.setCurrentIndex(self.profile_tab if self.profile_request
+                                              else 2 if images else 1 if texts else 0)
+        self._update_profile()
+
+    def _run_params_for(self, run_dir):
+        """Paramètres du calcul d'un dossier, d'après l'historique (enregistrés au lancement)."""
+        entry = next((e for e in self.history if Path(e.get("run_dir", "")) == Path(run_dir)), None)
+        return storage.merge_defaults(entry["params"]) if entry and entry.get("params") else None
+
+    def _update_profile(self):
+        """Calcule (une fois) et affiche le profil, quand l'onglet Profil est visible."""
+        if self.results_tabs.currentIndex() != self.profile_tab:
+            return
+        if not self.profile_request:
+            self.profile_view.set_profile(None)
+            self.profile_summary.setText("")
+            return
+        params, run_dir = self.profile_request
+        if not self.profile_data:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            try:
+                sdf_dir = splat.effective_sdf_dir(params)
+                self.profile_data = [linkprofile.compute(params, tx, sdf_dir=sdf_dir) for tx in params["tx_sites"]]
+            except (OSError, ValueError, KeyError) as exc:
+                self.profile_data = []
+                self.profile_summary.setText(tr("Profil impossible : {exc}", exc=exc))
+                return
+            finally:
+                QApplication.restoreOverrideCursor()
+        profile = self.profile_data[max(0, self.profile_tx.currentIndex())] if self.profile_data else None
+        self.profile_view.set_profile(profile)
+        self.profile_summary.setText(linkprofile.summary(profile) if profile
+                                     else tr("Émetteur et récepteur confondus."))
+
+    def _export_profile(self):
+        if not self.profile_view.profile:
+            return
+        default = str(Path(self.run_dir or ".") / "profil_liaison.png")
+        path, _ = QFileDialog.getSaveFileName(self, tr("Exporter le profil"), default, "PNG (*.png)")
+        if path:
+            self.profile_view.image().save(path)
 
     def _show_report(self, index):
         path = self.report_combo.itemData(index)
@@ -3558,9 +3705,7 @@ class MainWindow(QMainWindow):
             return
         lines = ["• " + tr("DLL {arch} manquantes : {dlls}", arch=arch, dlls=", ".join(state["missing"]))
                  for arch, state in report.items() if state["splat"] and state["missing"]]
-        gnuplot = bool(prereqs.gnuplot_missing(report))
-        if gnuplot:
-            lines.append("• " + tr("gnuplot absent (graphes point à point)"))
+        gnuplot = False         # facultatif : le profil de liaison est tracé par l'application
         if not any(state["splat"] for state in report.values()):
             lines.append("• " + tr("Exécutables SPLAT! absents de bin\\x64 et bin\\x86 : ils s'installent depuis "
                                    "une archive (fichier ou URL), puis les DLL nécessaires sont proposées."))
@@ -3579,13 +3724,15 @@ class MainWindow(QMainWindow):
         path.mkdir(parents=True, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
-    def _open_doc(self, lang):
-        arch = self.arch_combo.currentData()
-        for candidate in (storage.BIN_DIR / arch / "docs" / lang / "pdf" / "splat.pdf",
-                          storage.BIN_DIR / "x64" / "docs" / lang / "pdf" / "splat.pdf"):
-            if candidate.exists():
-                QDesktopServices.openUrl(QUrl.fromLocalFile(str(candidate)))
-                return
+    def show_help(self, search=False):
+        """Aide intégrée (documentation SPLAT! avec sommaire, index et recherche), fenêtre unique."""
+        if self.help_window is None:
+            self.help_window = help.HelpWindow(self)
+        self.help_window.show()
+        self.help_window.raise_()
+        self.help_window.activateWindow()
+        if search:
+            self.help_window.focus_search()
 
     def _open_terrain_dir(self):
         params = self._params_or_warn()

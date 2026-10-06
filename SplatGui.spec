@@ -16,6 +16,8 @@ a = Analysis(
     datas=[(str(ROOT / "splatgui" / "resources" / "splash_map.png"), "splatgui/resources"),
            (str(ROOT / "icons" / "splat_icon.ico"), "icons"),           # icône de fenêtre de secours
            (str(ROOT / "splatgui" / "locales" / "*.json"), "splatgui/locales"),    # traductions
+           (str(ROOT / "splatgui" / "help" / "*.html"), "splatgui/help"),          # aide intégrée (fr, en, es)
+           (str(ROOT / "splatgui" / "help" / "*.pdf"), "splatgui/help"),           # documentation d'origine
            (str(ROOT / "LICENSE"), ".")],                                    # GNU GPL v2 (secours)
     excludes=["tkinter"],
     noarchive=False,

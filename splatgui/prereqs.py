@@ -177,11 +177,11 @@ def summary(report):
         return False, tr("SPLAT! absent (ni x64 ni x86)")
     problems = [tr("{n} DLL {arch} manquante(s)", n=len(state["missing"]), arch=arch)
                 for arch, state in report.items() if state["splat"] and state["missing"]]
-    if gnuplot_missing(report):
-        problems.append(tr("gnuplot absent"))
     if problems:
         return False, tr("Dépendances : ") + ", ".join(problems)
-    return True, tr("Dépendances présentes (SPLAT! {arches})", arches=", ".join(installed))
+    # gnuplot est facultatif : le profil de liaison est tracé par SPLAT!Gui.
+    note = tr(" ; gnuplot absent (graphes gnuplot facultatifs)") if gnuplot_missing(report) else ""
+    return True, tr("Dépendances présentes (SPLAT! {arches})", arches=", ".join(installed)) + note
 
 
 def installed_executables(arch):

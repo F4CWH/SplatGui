@@ -18,7 +18,11 @@ Code source : <https://github.com/F4CWH/SplatGui>
   - gain repris du modèle d'antenne, toujours modifiable ;
   - résultat reporté dans les paramètres ITM.
 - **Propagation** : paramètres ITM / ITWOM, préréglages de sol, climats radio, polarisation.
-- **Relief** : téléchargement automatique des tuiles SRTM manquantes et conversion en SDF avec `srtm2sdf`, puis relance de SPLAT! si des tuiles manquaient.
+- **Relief** :
+  - téléchargement automatique des tuiles manquantes et conversion en SDF, puis relance de SPLAT! si des tuiles manquaient ;
+  - trois sources au choix : SRTM, Copernicus GLO-30 (mondial, plus récent) ou IGN RGE ALTO (France, sol nu, complété par Copernicus hors de France) ;
+  - sursol facultatif (arbres, bâti, arbustes) d'après l'occupation du sol ESA WorldCover, retiré à l'emplacement des sites pour que les hauteurs d'antenne restent comptées depuis le sol.
+- **Profil de liaison** (point à point) : relief, courbure terrestre, ligne de visée, première zone de Fresnel et 60 %, dégagement et obstacles, tracés par l'application (valeurs au survol, export PNG).
 - **Cartes** :
   - image composée (fond de carte, ombrage du relief, couverture, calques GeoJSON, icônes des sites, légende, échelle, nord, proportions corrigées) ;
   - ou carte en ligne interactive ;
@@ -45,7 +49,7 @@ SPLAT! n'est distribué qu'en code source : SPLAT!Gui ne contient pas ses exécu
 - de télécharger les DLL d'exécution :
   - **x64** : `msys-2.0.dll`, `msys-stdc++-6.dll`, etc., depuis le dépôt MSYS2, avec vérification SHA-256 ;
   - **x86** : `libstdc++-6.dll`, `libgcc_s_dw2-1.dll`, `libbz2-2.dll`, `zlib1.dll`, depuis MinGW.org et MSYS2 ;
-- de télécharger **gnuplot** 6.0.3 (distribution Windows 64 bits officielle, avec vérification SHA-256), nécessaire aux graphes point à point. Il est installé dans `gnuplot\` et son dossier `bin` est ajouté au PATH des deux architectures. Un gnuplot déjà installé ailleurs peut aussi être ajouté au PATH dans **Fichier → Réglages**.
+- de télécharger **gnuplot** 6.0.3 (distribution Windows 64 bits officielle, avec vérification SHA-256). Il est facultatif : il ne sert qu'aux graphes produits par SPLAT! (`-p`, `-e`, `-h`, `-H`, `-l`), le profil de liaison étant tracé par l'application. Il est installé dans `gnuplot\` et son dossier `bin` est ajouté au PATH des deux architectures. Un gnuplot déjà installé ailleurs peut aussi être ajouté au PATH dans **Fichier → Réglages**.
 
 ## Utilisation depuis les sources
 
@@ -82,6 +86,8 @@ Les données sont enregistrées à côté de l'exécutable (ou de `main.py`). Le
 | `bin\x64`, `bin\x86` | exécutables SPLAT! et utilitaires |
 | `deps\x64`, `deps\x86` | DLL téléchargées |
 | `terrain\srtm`, `terrain\sdf`, `terrain\tiles` | tuiles SRTM, fichiers SDF, cache des fonds de carte |
+| `terrain\copernicus`, `terrain\ign`, `terrain\worldcover` | relief Copernicus et IGN, occupation du sol (grilles compressées) |
+| `terrain\sdf-<source>[-sursol-…]` | fichiers SDF de chaque configuration de relief (source, hauteurs du sursol) |
 | `runs` | un dossier par calcul (fichiers d'entrée, rapports, cartes, `commande.cmd`) |
 | `qth`, `lrp` | sites et paramètres ITM importés / exportés |
 | `profiles`, `antennas` | profils et bibliothèque d'antennes |

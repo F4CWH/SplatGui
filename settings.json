@@ -72,6 +72,13 @@
     "graph_format": "png",
     "sdf_dir": "",
     "auto_terrain": true,
+    "relief_source": "ign",
+    "clutter": {
+      "enabled": false,
+      "trees": 15.0,
+      "built": 10.0,
+      "shrubs": 2.0
+    },
     "city_files": [],
     "boundary_files": [],
     "udt": "",
