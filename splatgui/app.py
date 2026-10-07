@@ -2397,6 +2397,11 @@ class MainWindow(QMainWindow):
 
     def _start_splat(self):
         exe, args, env = self.run_spec
+        if self.run_params["variant"] == "hd":
+            # Noms de tuiles attendus par splat-hd.exe (voir terrain.hd_alias).
+            for folder in (self.run_dir, splat.effective_sdf_dir(self.run_params)):
+                for error in terrain.link_hd_aliases(folder) if folder else []:
+                    self._console_write(tr("Alias de tuile HD impossible : {error}\n", error=error))
         self.splat_output = ""
         self._progress_label = tr("Relance de SPLAT!") if self.terrain_retried else "SPLAT!"
         self._set_progress(None if self.run_params["mode"] == "p2p" else 0.0,
@@ -2519,6 +2524,7 @@ class MainWindow(QMainWindow):
     def _finalize(self, result, switch_tab=True):
         for path in self.site_tiles:             # copies de tuiles (sursol) : inutiles après le calcul
             Path(path).unlink(missing_ok=True)
+            terrain.hd_alias(path).unlink(missing_ok=True)
         self.site_tiles = []
         self._update_disk_usage()                # relief éventuellement téléchargé et converti
         if self.run_params and self.run_params["map_aspect_file"] and self.run_dir:

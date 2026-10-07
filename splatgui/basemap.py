@@ -133,7 +133,7 @@ def _from_kml(path, width, height):
 
 def _from_console(path, width, height):
     """Anciennes exécutions sans .geo : emprise des régions chargées par SPLAT!."""
-    regions = re.findall(r'"(?:[^"]*[/\\])?(-?\d+)_(-?\d+)_(\d+)_(\d+)(?:-hd)?(?:\.sdf)?"',
+    regions = re.findall(r'"(?:[^"]*[/\\])?(-?\d+)[_:](-?\d+)[_:](\d+)[_:](\d+)(?:-hd)?(?:\.sdf)?"',
                          Path(path).read_text(encoding="utf-8", errors="replace"))
     if not regions:
         return None

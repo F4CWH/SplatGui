@@ -37,7 +37,7 @@ SRTM1_SIZE = 3601 * 3601 * 2
 SRTM3_SIZE = 1201 * 1201 * 2
 
 # Message de SPLAT! lorsqu'une tuile SDF est absente.
-MISSING_RE = re.compile(r'Region\s+"(-?\d+)_(-?\d+)_(\d+)_(\d+)(?:-hd)?"\s+assumed as sea-level')
+MISSING_RE = re.compile(r'Region\s+"(-?\d+)[_:](-?\d+)[_:](\d+)[_:](\d+)(?:-hd)?"\s+assumed as sea-level')
 
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -74,6 +74,44 @@ def sdf_exists(sdf_dir, tile, hd):
     path = sdf_file(sdf_dir, tile, hd)
     # Tuile E000 : « …_359_360 » ou « …_359_0 » selon la convention de l'outil.
     return path.exists() or Path(str(path).replace("_359_360", "_359_0")).exists()
+
+
+# Le portage Windows de splat-hd.exe cherche « 48:49:357:358-hd.sdf » (le format standard a été
+# corrigé en « _ », pas le format HD) ; sous MSYS, le « : » d'un nom de fichier devient U+F03A.
+MSYS_COLON = ""
+
+
+def hd_alias(path):
+    """Nom sous lequel splat-hd.exe cherche une tuile HD « …-hd.sdf »."""
+    path = Path(path)
+    return path.with_name(path.name.replace("_", MSYS_COLON))
+
+
+def link_hd_aliases(folder):
+    """Donne à chaque tuile « *-hd.sdf » de `folder` le nom attendu par splat-hd.exe (lien
+    physique, sinon copie). Renvoie les erreurs (liste de messages)."""
+    try:
+        paths = [p for p in Path(folder).glob("*-hd.sdf") if "_" in p.name]
+    except OSError:
+        return []
+    errors = []
+    for path in paths:
+        alias = hd_alias(path)
+        try:
+            if alias.exists():
+                if os.path.samefile(path, alias):
+                    continue
+                source, target = path.stat(), alias.stat()
+                if target.st_size == source.st_size and target.st_mtime >= source.st_mtime:
+                    continue        # copie à jour
+                alias.unlink()      # tuile réécrite (os.replace) : l'ancien lien pointe sur l'ancienne
+            try:
+                os.link(path, alias)
+            except OSError:
+                shutil.copy2(path, alias)
+        except OSError as exc:
+            errors.append(f"{alias.name} : {exc}")
+    return errors
 
 
 def missing_from_output(text):
@@ -276,6 +314,7 @@ def folder_usage(folder, suffixes):
     """(nombre, taille totale en octets) des fichiers de `folder` (sans sous-dossiers) dont le
     nom se termine par l'un des `suffixes` ; (0, 0) si le dossier n'existe pas."""
     count = size = 0
+    seen = set()            # liens physiques (alias des tuiles HD) comptés une seule fois
     try:
         entries = list(os.scandir(folder))
     except OSError:
@@ -283,8 +322,12 @@ def folder_usage(folder, suffixes):
     for entry in entries:
         try:
             if entry.is_file() and entry.name.lower().endswith(suffixes):
+                stat = os.stat(entry.path)
+                if stat.st_ino and (stat.st_dev, stat.st_ino) in seen:
+                    continue
+                seen.add((stat.st_dev, stat.st_ino))
                 count += 1
-                size += entry.stat().st_size
+                size += stat.st_size
         except OSError:
             continue
     return count, size
