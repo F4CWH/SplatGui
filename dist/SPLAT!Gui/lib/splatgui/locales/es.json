@@ -690,6 +690,7 @@
  "Hors de la zone couverte par l'IGN : Copernicus.": "Fuera de la zona cubierta por el IGN: Copernicus.",
  "Sursol retiré à l'emplacement des sites : {name}": "Clutter eliminado en los sitios: {name}",
  "Pas de données (mer).": "Sin datos (mar).",
+ "Alias de tuile HD impossible : {error}\n": "Alias de tesela HD imposible: {error}\n",
  "Relief {name} impossible : {exc}": "Relieve {name} imposible: {exc}",
  "Visibilité directe, Fresnel partiellement obstruée": "Visibilidad directa, zona de Fresnel parcialmente obstruida",
  "azimut {a:.1f}°": "azimut {a:.1f}°",
