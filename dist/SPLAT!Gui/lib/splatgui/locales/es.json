@@ -251,7 +251,7 @@
  "Aucun (relief seul)": "Ninguno (solo relieve)",
  "0 % : relief SPLAT! seul — 100 % : fond de carte seul": "0 %: solo relieve de SPLAT! — 100 %: solo mapa base",
  "Couverture radio :": "Cobertura radio:",
- "Afficher la couverture calculée par SPLAT! (au-dessus de toutes les autres couches)": "Mostrar la cobertura calculada por SPLAT! (por encima de todas las demás capas)",
+ "Afficher la couverture calculée par SPLAT! (sous les calques GeoJSON)": "Mostrar la cobertura calculada por SPLAT! (debajo de las capas GeoJSON)",
  "Opacité de la couverture radio (0 % : transparente, 100 % : opaque)": "Opacidad de la cobertura radio (0 %: transparente, 100 %: opaca)",
  "Cadrer sur le tracé": "Encuadrar el trazado",
  "Recadre sur le trajet point à point ou la zone couverte et charge un fond de carte plus détaillé": "Encuadra el trayecto punto a punto o la zona cubierta y carga un mapa base más detallado",
