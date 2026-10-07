@@ -379,6 +379,11 @@ class LiveMap(SlippyMap):
             self._draw_tiles(painter, self._srtm_key() if relief == "srtm" else relief,
                              min(self.zoom, basemap.SOURCES.get(relief, {}).get("max_zoom", 18)))
             painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        if self.coverage is not None and self.coverage_visible:
+            painter.setOpacity(self.coverage_opacity)
+            draw_platecarree(painter, self.coverage, self.coverage_ref, self.zoom,
+                             self.cx - self.width() / 2, self.cy - self.height() / 2)
+        # Calques GeoJSON au-dessus des autres couches (sous les icônes et la légende).
         shown, self._hidden_layers = self._shown_vectors() if self.vectors else ([], [])
         signature = self._vector_signature(shown)
         if signature:
@@ -387,10 +392,6 @@ class LiveMap(SlippyMap):
             painter.setOpacity(self.vector_opacity)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             self._draw_labels(painter, shown)
-        if self.coverage is not None and self.coverage_visible:
-            painter.setOpacity(self.coverage_opacity)
-            draw_platecarree(painter, self.coverage, self.coverage_ref, self.zoom,
-                             self.cx - self.width() / 2, self.cy - self.height() / 2)
         painter.setOpacity(1.0)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         self._draw_markers(painter)
@@ -586,12 +587,13 @@ const coverage = L.imageOverlay('couverture.png', bounds, {{opacity: {coverage_o
 const overlays = {{{json.dumps(tr('Estompage du relief (IGN)'))}: relief}};
 if (srtmLayer) overlays[{json.dumps(tr('Ombrage du relief (SRTM)'))}] = srtmLayer;
 const control = L.control.layers(bases, overlays, {{collapsed: false}}).addTo(map);
+// Calques GeoJSON au-dessus des autres couches (overlayPane : 400), sous les marqueurs (600).
+map.createPane('calques').style.zIndex = 450;
 for (const v of (window.CALQUES || [])) {{
-  const layer = L.geoJSON(v.data, {{style: {{color: v.color, weight: v.width, fill: false}},
+  const layer = L.geoJSON(v.data, {{pane: 'calques', style: {{color: v.color, weight: v.width, fill: false}},
     onEachFeature: (f, l) => f.properties.nom && l.bindTooltip(f.properties.nom, {{sticky: true}})}});
   layer.addTo(map); control.addOverlay(layer, v.label);
 }}
-coverage.bringToFront();
 control.addOverlay(coverage, {json.dumps(tr('Couverture radio (SPLAT!)'))});
 for (const m of {json.dumps(markers)}) {{
   const icon = m.icon ? L.icon({{iconUrl: m.icon, iconSize: [36, 36], iconAnchor: [18, 36]}}) : new L.Icon.Default();

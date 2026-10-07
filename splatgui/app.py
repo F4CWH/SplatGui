@@ -2927,7 +2927,7 @@ class MainWindow(QMainWindow):
         row.addWidget(SliderValue(self.basemap_opacity))
         self.coverage_check = QCheckBox(tr("Couverture radio :"))
         self.coverage_check.setToolTip(tr("Afficher la couverture calculée par SPLAT! "
-                                       "(au-dessus de toutes les autres couches)"))
+                                       "(sous les calques GeoJSON)"))
         self.coverage_check.setChecked(bool(overlay.get("coverage_visible", True)))
         row.addWidget(self.coverage_check)
         self.coverage_opacity = QSlider(Qt.Orientation.Horizontal)
@@ -3448,8 +3448,8 @@ class MainWindow(QMainWindow):
         ign_relief = self._raster_layer("ign_estompage") if relief == "ign_estompage" else None
         if self.current_coverage is None:
             self.current_coverage = basemap.coverage_layer(image)
-        # Ordre : relief SPLAT! (sans la couverture) → fond de carte → ombrage → calques GeoJSON
-        # → couverture radio (au-dessus de toutes les couches) → icônes, légende, échelle.
+        # Ordre : relief SPLAT! (sans la couverture) → fond de carte → ombrage → couverture radio
+        # → calques GeoJSON (au-dessus de toutes les couches) → icônes, légende, échelle.
         image = self._relief_layer().convertToFormat(QImage.Format.Format_ARGB32_Premultiplied)
         painter = QPainter(image)
         if base is not None:
@@ -3471,8 +3471,6 @@ class MainWindow(QMainWindow):
             if self._frame_ratio():
                 image, self.display_ref = basemap.force_ratio(image, self.display_ref, self._frame_ratio())
             notes.insert(0, tr("largeur × {factor:.2f}", factor=basemap.aspect_factor(self.current_ref)))
-        # Calques vectoriels après la correction : traits et textes ne sont pas déformés.
-        image = self._draw_vector_layers(image, self.display_ref)
         if self.coverage_check.isChecked():
             coverage = self._display_coverage(image.size())
             image = image.convertToFormat(QImage.Format.Format_ARGB32_Premultiplied)
@@ -3480,6 +3478,8 @@ class MainWindow(QMainWindow):
             painter.setOpacity(self.coverage_opacity.value() / 100)
             painter.drawImage(0, 0, coverage)
             painter.end()
+        # Calques vectoriels après la correction : traits et textes ne sont pas déformés.
+        image = self._draw_vector_layers(image, self.display_ref)
         if self.sites_box.isChecked() and self.current_sites and self.display_ref is not None:
             image = image.convertToFormat(QImage.Format.Format_ARGB32_Premultiplied)
             sites.draw_sites(image, self.display_ref, self.current_sites, self.tx_icon.currentData(),
