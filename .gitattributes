@@ -7,7 +7,7 @@
 *.py3    text diff=python
 *.pyw    text diff=python
 *.pyx    text diff=python
-*.pyz    text diff=python
+*.pyz    binary
 *.pyi    text diff=python
 
 # Binary files
