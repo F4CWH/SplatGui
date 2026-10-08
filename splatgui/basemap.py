@@ -138,11 +138,11 @@ def _from_console(path, width, height):
     if not regions:
         return None
     lats = [int(r[0]) for r in regions] + [int(r[1]) for r in regions]
-    wests = [int(r[2]) for r in regions] + [int(r[3]) for r in regions]
-    west_lon = -max(wests)
-    east_lon = -min(wests)
-    if west_lon < -180:
-        west_lon, east_lon = west_lon + 360, east_lon + 360
+    # Longitudes Est de chaque région, ramenées dans [-180, 180] une par une : une emprise qui
+    # traverse le méridien de Greenwich mêle des régions « 0_1 » et « 359_360 ».
+    wests = [(-int(r[3]) + 180) % 360 - 180 for r in regions]     # bord ouest = -(ouest max)
+    west_lon = min(wests)
+    east_lon = max(wests) + 1
     north, south = max(lats), min(lats)
     dx, dy = (east_lon - west_lon) / width, (north - south) / height
     return GeoRef(west_lon + dx / 2, north - dy / 2, east_lon - dx / 2, south + dy / 2, width, height)
@@ -248,11 +248,16 @@ def build_basemap(source_key, ref, log=lambda _m: None, cancel=lambda: False):
     log(tr("{source} : zoom {z}, {n} tuile(s)", source=tr(source["label"]), z=z, n=len(coords)))
 
     paths = {}
+    errors = []
     with ThreadPoolExecutor(max_workers=source["workers"]) as pool:
         futures = {pool.submit(download_tile, source_key, z, x, y, cancel): (x, y) for x, y in coords}
         try:
             for done, future in enumerate(as_completed(futures), start=1):
-                paths[futures[future]] = future.result()
+                try:
+                    paths[futures[future]] = future.result()
+                except (OSError, urllib.error.URLError) as exc:    # tuile en erreur : laissée vide
+                    paths[futures[future]] = None
+                    errors.append(exc)
                 if done % 8 == 0 or done == len(coords):
                     log(tr("{source} : {done}/{n} tuiles", source=tr(source["label"]), done=done, n=len(coords)))
         except BaseException:
@@ -271,7 +276,12 @@ def build_basemap(source_key, ref, log=lambda _m: None, cancel=lambda: False):
             drawn += 1
     painter.end()
     if not drawn:
+        if errors:
+            raise errors[0]
         raise RuntimeError(tr("Aucune tuile {source} disponible pour cette zone.", source=tr(source["label"])))
+    if errors:
+        log(tr("{source} : {n} tuile(s) indisponible(s), laissée(s) vide(s) ({error})",
+               source=tr(source["label"]), n=len(errors), error=errors[0]))
 
     # Reprojection : en x, lon et Mercator sont tous deux linéaires ; en y, une ligne
     # de la carte (latitude constante) correspond à une ligne de la mosaïque.

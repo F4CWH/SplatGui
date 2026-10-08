@@ -4,7 +4,9 @@ Le relief est lu dans les fichiers SDF utilisés par SPLAT! pour le calcul (surs
 le long de l'arc de grand cercle entre l'émetteur et le récepteur. Le profil indique :
     - le relief, rehaussé de la courbure terrestre (rayon effectif = k × rayon terrestre, k = -m) ;
     - la ligne de visée entre les antennes ;
-    - la première zone de Fresnel et ses 60 % (fréquence -f, sinon celle des paramètres ITM) ;
+    - la première zone de Fresnel et le dégagement exigé (-fz, 60 % par défaut ; fréquence -f,
+      sinon celle des paramètres ITM) ;
+    - le sursol uniforme -gc, ajouté au relief hors des extrémités comme le fait SPLAT! ;
     - le dégagement minimal et les obstacles.
 """
 
@@ -126,6 +128,11 @@ def compute(params, tx, run_dir=None, sdf_dir=None):
     k = _number(params, "m") or 1.0
     bulge = distance * (length - distance) / (2 * k * EARTH_RADIUS_M)
     terrain_line = ground + bulge
+    clutter = _number(params, "gc") or 0.0            # -gc : m, ou pieds sans -metric
+    if clutter > 0:
+        terrain_line[1:-1] += clutter if params.get("metric", True) else clutter * FEET
+    fz = _number(params, "fz")
+    fz = fz / 100 if fz and fz > 0 else 0.6
     h_tx, h_rx = site_height_m(tx), site_height_m(rx)
     a_tx, a_rx = ground[0] + h_tx, ground[-1] + h_rx
     los = a_tx + (a_rx - a_tx) * distance / length
@@ -146,7 +153,7 @@ def compute(params, tx, run_dir=None, sdf_dir=None):
         "distance": distance, "ground": ground, "terrain": terrain_line, "bulge": bulge, "los": los,
         "fresnel": fresnel, "clearance": clearance, "length": length, "azimuth": azimuth, "k": k,
         "frequency": frequency, "tilt": tilt, "tx": tx, "rx": rx, "h_tx": h_tx, "h_rx": h_rx,
-        "metric": bool(params.get("metric", True)),
+        "metric": bool(params.get("metric", True)), "fz": fz,
         "worst": worst, "worst_ratio": worst_ratio,
         "min_clearance": float(clearance[worst]),
         "min_ratio": float(ratio[worst_ratio]) if frequency else None,
@@ -173,8 +180,9 @@ def verdict(profile):
     ratio = profile["min_ratio"]
     if ratio is None:
         return tr("Visibilité directe"), QColor(30, 132, 73)
-    if ratio >= 0.6:
-        return tr("Dégagée (≥ 60 % de la 1re zone de Fresnel)"), QColor(30, 132, 73)
+    if ratio >= profile.get("fz", 0.6):
+        return (tr("Dégagée (≥ {pct:g} % de la 1re zone de Fresnel)", pct=profile.get("fz", 0.6) * 100),
+                QColor(30, 132, 73))
     return tr("Visibilité directe, Fresnel partiellement obstruée"), QColor(211, 132, 0)
 
 
@@ -255,7 +263,7 @@ class ProfileView(QWidget):
             painter.drawText(QRectF(x - 40, rect.bottom() + 4, 80, 16), Qt.AlignmentFlag.AlignHCenter,
                              f"{value:g} {label}")
 
-        # Zone de Fresnel (1re zone et 60 %)
+        # Zone de Fresnel (1re zone et dégagement exigé -fz)
         if p["frequency"]:
             upper = [point(x, v) for x, v in zip(d, p["los"] + p["fresnel"])]
             lower = [point(x, v) for x, v in zip(d[::-1], (p["los"] - p["fresnel"])[::-1])]
@@ -265,7 +273,7 @@ class ProfileView(QWidget):
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(QPen(QColor(63, 127, 208, 160), 1, Qt.PenStyle.DashLine))
             for sign in (1, -1):
-                painter.drawPolyline(QPolygonF([point(x, v) for x, v in zip(d, p["los"] + sign * 0.6 * p["fresnel"])]))
+                painter.drawPolyline(QPolygonF([point(x, v) for x, v in zip(d, p["los"] + sign * p["fz"] * p["fresnel"])]))
 
         # Relief (rehaussé de la courbure) et courbure seule
         ground = QPainterPath(point(d[0], y_min))
@@ -286,7 +294,7 @@ class ProfileView(QWidget):
         painter.setPen(QPen(text_color, 2))
         for x, base, top_ in ((0, p["terrain"][0], p["los"][0]), (p["length"], p["terrain"][-1], p["los"][-1])):
             painter.drawLine(point(x, base), point(x, top_))
-        if p["obstructions"] or (p["min_ratio"] is not None and p["min_ratio"] < 0.6):
+        if p["obstructions"] or (p["min_ratio"] is not None and p["min_ratio"] < p["fz"]):
             worst = p["worst"] if p["obstructions"] else p["worst_ratio"]
             painter.setPen(QPen(color, 2))
             painter.setBrush(Qt.BrushStyle.NoBrush)

@@ -356,11 +356,12 @@ def build_arguments(params, tx_files, rx_file):
 
 def site_file_bases(params):
     """Noms de base (sans extension) des fichiers de site : (émetteurs, récepteur ou None).
-    Deux sites de même nom reçoivent des noms distincts."""
+    Deux sites de même nom reçoivent des noms distincts. Sans point : SPLAT! cherche les
+    .lrp / .az / .el d'un site en coupant le nom du .qth au premier point."""
     used = set()
 
     def base_for(site, prefix):
-        base = f"{prefix}_{safe_filename(site['name'])}"
+        base = f"{prefix}_{safe_filename(site['name']).replace('.', '_')}"
         while base.lower() in used:
             base += "_"
         used.add(base.lower())

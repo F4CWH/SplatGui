@@ -698,7 +698,7 @@
  "k = {k:g}": "k = {k:g}",
  "Visibilité obstruée": "Line of sight obstructed",
  "Visibilité directe": "Line of sight",
- "Dégagée (≥ 60 % de la 1re zone de Fresnel)": "Clear (≥ 60% of the first Fresnel zone)",
+ "Dégagée (≥ {pct:g} % de la 1re zone de Fresnel)": "Clear (≥ {pct:g}% of the first Fresnel zone)",
  " ({r:.0%} de F1)": " ({r:.0%} of F1)",
  "{r:.0%} de F1 au plus défavorable": "{r:.0%} of F1 at the worst point",
  "{f:g} MHz": "{f:g} MHz",
@@ -709,5 +709,6 @@
  "dégagement minimal {c:+.1f} {hu} à {d:.2f} {du}": "minimum clearance {c:+.1f} {hu} at {d:.2f} {du}",
  "exécutable impossible à lancer": "executable could not be launched",
  "Ce calcul est en cours : arrêtez-le avant de le retirer.": "This calculation is running: stop it before removing it.",
- "Arrêt de la préparation du relief…": "Stopping terrain preparation…"
+ "Arrêt de la préparation du relief…": "Stopping terrain preparation…",
+ "{source} : {n} tuile(s) indisponible(s), laissée(s) vide(s) ({error})": "{source}: {n} tile(s) unavailable, left blank ({error})"
 }

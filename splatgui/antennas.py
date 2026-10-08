@@ -454,8 +454,8 @@ def splat_el_text(pattern, tilt, azimuth):
 
 def write_splat_files(pattern, base_path, azimuth=0.0, tilt=0.0):
     """Écrit <base>.az et <base>.el ; renvoie les chemins."""
-    base_path = Path(base_path)
-    az_path, el_path = base_path.with_suffix(".az"), base_path.with_suffix(".el")
+    base_path = Path(base_path)          # extensions ajoutées, pas substituées (« YAGI_10.25dBi »)
+    az_path, el_path = base_path.with_name(base_path.name + ".az"), base_path.with_name(base_path.name + ".el")
     az_path.write_text(splat_az_text(pattern, azimuth), encoding="ascii")
     el_path.write_text(splat_el_text(pattern, tilt, azimuth), encoding="ascii")
     return az_path, el_path

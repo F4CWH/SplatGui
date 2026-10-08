@@ -8,6 +8,7 @@
 
 import json
 import math
+import time
 import urllib.parse
 import urllib.request
 from collections import OrderedDict
@@ -26,6 +27,8 @@ from .widgets import ZoomControls
 
 TILE = 256
 MIN_ZOOM, MAX_ZOOM = 2, 18
+RETRY_DELAY = 30.0     # s avant de redemander une tuile en échec (réseau)
+FAILED = "<échec>"     # tuile non obtenue (erreur réseau), par opposition à une tuile inexistante
 
 
 def _world(z):
@@ -96,6 +99,7 @@ class SlippyMap(QWidget):
         self._pixmaps = OrderedDict()
         self._pending = set()
         self._missing = set()
+        self._failed = {}             # clé -> instant de l'échec (nouvel essai après RETRY_DELAY)
         self._signals = _TileSignals()
         self._signals.ready.connect(self._tile_ready)
         self._pool = ThreadPoolExecutor(max_workers=basemap.SOURCES[source]["workers"])
@@ -161,12 +165,17 @@ class SlippyMap(QWidget):
         try:
             path = basemap.download_tile(source, z, x, y)
         except Exception:
-            path = None
+            self._signals.ready.emit((key, FAILED))
+            return
         self._signals.ready.emit((key, str(path) if path else None))
 
     def _tile_ready(self, payload):
         key, path = payload
         self._pending.discard(key)
+        if path == FAILED:
+            self._failed[key] = time.monotonic()
+            return
+        self._failed.pop(key, None)
         if isinstance(path, QImage):          # tuile calculée (ex. ombrage SRTM)
             image = path
         else:
@@ -184,10 +193,15 @@ class SlippyMap(QWidget):
         if key in self._pixmaps:
             self._pixmaps.move_to_end(key)
             return self._pixmaps[key]
-        if key not in self._pending and key not in self._missing:
+        if key not in self._pending and key not in self._missing and self._may_fetch(key):
             self._pending.add(key)
             self._pool.submit(self._fetch, key)
         return None
+
+    def _may_fetch(self, key):
+        """Faux pendant RETRY_DELAY après un échec réseau de la tuile."""
+        failed = self._failed.get(key)
+        return failed is None or time.monotonic() - failed >= RETRY_DELAY
 
     def _parent_tile(self, z, x, y, source=None):
         """Morceau agrandi d'une tuile de niveau inférieur déjà chargée (en attendant)."""
@@ -272,7 +286,8 @@ class SlippyMap(QWidget):
     # Souris ------------------------------------------------------------------
 
     def _latlon_at(self, pos):
-        return to_latlon(self.cx + pos.x() - self.width() / 2, self.cy + pos.y() - self.height() / 2, self.zoom)
+        lat, lon = to_latlon(self.cx + pos.x() - self.width() / 2, self.cy + pos.y() - self.height() / 2, self.zoom)
+        return lat, (lon + 180.0) % 360.0 - 180.0      # carte répétée en longitude
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:

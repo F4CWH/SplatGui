@@ -698,7 +698,7 @@
  "k = {k:g}": "k = {k:g}",
  "Visibilité obstruée": "Visibilidad obstruida",
  "Visibilité directe": "Visibilidad directa",
- "Dégagée (≥ 60 % de la 1re zone de Fresnel)": "Despejada (≥ 60 % de la 1.ª zona de Fresnel)",
+ "Dégagée (≥ {pct:g} % de la 1re zone de Fresnel)": "Despejada (≥ {pct:g} % de la 1.ª zona de Fresnel)",
  " ({r:.0%} de F1)": " ({r:.0%} de F1)",
  "{r:.0%} de F1 au plus défavorable": "{r:.0%} de F1 en el punto más desfavorable",
  "{f:g} MHz": "{f:g} MHz",
@@ -709,5 +709,6 @@
  "dégagement minimal {c:+.1f} {hu} à {d:.2f} {du}": "despeje mínimo {c:+.1f} {hu} a {d:.2f} {du}",
  "exécutable impossible à lancer": "no se pudo lanzar el ejecutable",
  "Ce calcul est en cours : arrêtez-le avant de le retirer.": "Este cálculo está en curso: deténgalo antes de quitarlo.",
- "Arrêt de la préparation du relief…": "Deteniendo la preparación del relieve…"
+ "Arrêt de la préparation du relief…": "Deteniendo la preparación del relieve…",
+ "{source} : {n} tuile(s) indisponible(s), laissée(s) vide(s) ({error})": "{source}: {n} tesela(s) no disponible(s), dejada(s) en blanco ({error})"
 }

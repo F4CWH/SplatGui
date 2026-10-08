@@ -17,15 +17,19 @@ from .i18n import tr
 METERS_PER_DEG_LAT = 110_574.0
 METERS_PER_DEG_LON = 111_320.0
 
-_tiles = OrderedDict()   # (lat, lon) -> tableau numpy (n, n) ou None
+_tiles = OrderedDict()   # (lat, lon) -> tableau numpy (n, n) ; tuiles absentes non mémorisées
+_tiles_lock = threading.Lock()  # cache partagé par l'interface et les calculs en arrière-plan
 _MAX_TILES = 9
 
 
 def _tile(lat, lon):
     key = (lat, lon)
-    if key in _tiles:
-        _tiles.move_to_end(key)
-        return _tiles[key]
+    with _tiles_lock:
+        if key in _tiles:
+            _tiles.move_to_end(key)
+            return _tiles[key]
+    # Une tuile absente est recherchée à chaque fois : elle peut être téléchargée entre-temps
+    # (calcul SPLAT!, autre source).
     path = terrain.find_srtm(key)
     array = None
     if path is not None:
@@ -37,9 +41,11 @@ def _tile(lat, lon):
                 array[array < -1000] = 0.0      # trous de données SRTM (-32768)
         except (OSError, ValueError, StopIteration):
             array = None
-    _tiles[key] = array
-    while len(_tiles) > _MAX_TILES:
-        _tiles.popitem(last=False)
+    if array is not None:
+        with _tiles_lock:
+            _tiles[key] = array
+            while len(_tiles) > _MAX_TILES:
+                _tiles.popitem(last=False)
     return array
 
 
@@ -136,12 +142,12 @@ def ensure_srtm(tiles, url_template, log=lambda _m: None, cancel=lambda: False):
     fils d'exécution les demandent). Renvoie le nombre de tuiles téléchargées."""
     count = 0
     for tile in tiles:
-        if terrain.find_srtm(tile) is not None or terrain._unavailable_marker(tile).exists():
+        if terrain.find_srtm(tile) is not None or terrain.marker_valid(terrain._unavailable_marker(tile)):
             continue
         with _locks_guard:
             lock = _download_locks.setdefault(tile, threading.Lock())
         with lock:
-            if terrain.find_srtm(tile) is not None or terrain._unavailable_marker(tile).exists():
+            if terrain.find_srtm(tile) is not None or terrain.marker_valid(terrain._unavailable_marker(tile)):
                 continue
             terrain.SRTM_DIR.mkdir(parents=True, exist_ok=True)
             log(tr("Téléchargement de la tuile SRTM {tile}…", tile=terrain.tile_name(*tile)))
@@ -151,5 +157,4 @@ def ensure_srtm(tiles, url_template, log=lambda _m: None, cancel=lambda: False):
             except Exception as exc:          # réseau indisponible, etc.
                 log(tr("Tuile SRTM {tile} indisponible : {exc}", tile=terrain.tile_name(*tile), exc=exc))
                 continue
-            _tiles.pop(tile, None)            # oublie l'absence mise en cache
     return count
