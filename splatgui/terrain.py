@@ -16,6 +16,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 import urllib.error
 import urllib.request
 import zipfile
@@ -164,6 +165,38 @@ def _unavailable_marker(tile):
     return SRTM_DIR / f"{tile_name(*tile)}.absent"
 
 
+ABSENT_MAX_AGE = 7 * 86400
+
+
+def marker_valid(path):
+    """Marqueur « pas de données » encore valable. Au-delà d'une semaine la tuile est redemandée :
+    un refus passager du serveur ne doit pas imposer le niveau de la mer définitivement."""
+    try:
+        return time.time() - Path(path).stat().st_mtime < ABSENT_MAX_AGE
+    except OSError:
+        return False
+
+
+def run_cancellable(args, cancel, timeout, **kwargs):
+    """Comme subprocess.run (sorties fusionnées), mais interrompu dès que `cancel()` est vrai.
+    Renvoie (code de retour, sortie en octets) ; lève Cancelled ou subprocess.TimeoutExpired."""
+    with subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                          creationflags=CREATE_NO_WINDOW, **kwargs) as proc:
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                output, _ = proc.communicate(timeout=0.5)
+                return proc.returncode, output
+            except subprocess.TimeoutExpired:
+                stop = cancel()
+                if stop or time.monotonic() > deadline:
+                    proc.kill()
+                    proc.communicate()
+                    if stop:
+                        raise Cancelled() from None
+                    raise subprocess.TimeoutExpired(args, timeout) from None
+
+
 def find_srtm(tile):
     for suffix in (".hgt", ".hgt.gz", ".hgt.zip", ".zip"):
         path = SRTM_DIR / f"{tile_name(*tile)}{suffix}"
@@ -280,14 +313,13 @@ def convert(tile, srtm_path, hd, sdf_dir, converters, log, cancel):
             log("  " + tr("Conversion de {name} avec {exe}", name=name, exe=label)
                 + (tr(" (environ une minute en HD)") if hd else "") + "…\n")
             try:
-                proc = subprocess.run([str(exe), "-d", "/dev/null", f"{name}.hgt"], cwd=work, env=env,
-                                      stdin=subprocess.DEVNULL, capture_output=True,
-                                      creationflags=CREATE_NO_WINDOW, timeout=900)
+                returncode, output = run_cancellable([str(exe), "-d", "/dev/null", f"{name}.hgt"], cancel,
+                                                     900, cwd=work, env=env)
             except (OSError, subprocess.TimeoutExpired) as exc:
                 errors.append(f"{label} : {exc}")
                 continue
             produced = [p for p in work.iterdir() if p.suffix.lower() == ".sdf"]
-            if proc.returncode == 0 and produced:
+            if returncode == 0 and produced:
                 Path(sdf_dir).mkdir(parents=True, exist_ok=True)
                 target = None
                 for path in produced:
@@ -297,8 +329,8 @@ def convert(tile, srtm_path, hd, sdf_dir, converters, log, cancel):
                     target = Path(sdf_dir) / clean
                     shutil.move(path, target)          # dossier SDF éventuellement sur un autre lecteur
                 return target
-            output = (proc.stdout + proc.stderr).decode("latin-1", "replace").strip()
-            errors.append(f"{label} : code {proc.returncode:#x} {output[-200:]}")
+            output = output.decode("latin-1", "replace").strip()
+            errors.append(f"{label} : code {returncode:#x} {output[-200:]}")
         raise RuntimeError(tr("Échec de la conversion de {name} :", name=name) + "\n    "
                            + "\n    ".join(errors or [tr("aucun srtm2sdf")]))
     finally:
@@ -365,7 +397,7 @@ def ensure_tiles(tiles, hd, sdf_dir, converters, url_template, log, cancel=lambd
         if hd and srtm is not None and len(read_hgt(srtm)) != SRTM1_SIZE:
             srtm = None  # tuile 3" déposée à la main : inutilisable en HD
         if srtm is None:
-            if _unavailable_marker(tile).exists() and not retry_unavailable:
+            if marker_valid(_unavailable_marker(tile)) and not retry_unavailable:
                 summary["unavailable"].append(name)
                 continue
             try:

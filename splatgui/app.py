@@ -67,6 +67,12 @@ def mono_font():
     return font
 
 
+def result_text(result):
+    """Libellé traduit d'un résultat de calcul : (texte français, valeurs françaises ou nombres)."""
+    text, values = result
+    return tr(text, **{key: tr(value) if isinstance(value, str) else value for key, value in values.items()})
+
+
 def spin(minimum, maximum, decimals=3, step=1.0, suffix=""):
     box = QDoubleSpinBox()
     box.setRange(minimum, maximum)
@@ -821,11 +827,13 @@ class MainWindow(QMainWindow):
         step = progress or (lambda _value, _text: None)
         step(10, tr("Chargement des réglages et de l'historique…"))
         self.settings = storage.load_settings()
-        self.history = storage.load_history()
+        # Calculs restés « en cours » (application fermée ou plantée pendant le calcul).
+        self.history = storage.close_stale_history(N_("en cours"), N_("interrompu"))
         self.profile_name = self.settings.get("last_profile") or storage.DEFAULT_PROFILE
         self.saved_params = None      # contenu enregistré du profil courant
         self.process = None
-        self.run_dir = None
+        self.run_dir = None           # dossier du calcul lancé (ou du dernier calcul)
+        self.shown_dir = None         # dossier dont les résultats sont affichés
         self.run_started = None
         self.help_window = None       # aide intégrée, créée à la première ouverture
         self.run_params = None
@@ -833,7 +841,9 @@ class MainWindow(QMainWindow):
         self.terrain_worker = None
         self.terrain_retried = False
         self.site_tiles = []          # tuiles corrigées (sursol) écrites dans le dossier du calcul
-        self.pending_result = ""
+        self.pending_result = (N_("terminé"), {})
+        self._start_failed = False
+        self._closing = False
         self.splat_output = ""
         self._loading = False
 
@@ -1813,8 +1823,8 @@ class MainWindow(QMainWindow):
         self.files_list.itemDoubleClicked.connect(
             lambda item: QDesktopServices.openUrl(QUrl.fromLocalFile(item.data(Qt.ItemDataRole.UserRole))))
         open_dir = QPushButton(tr("Ouvrir le dossier"))
-        open_dir.clicked.connect(lambda: self.run_dir and QDesktopServices.openUrl(
-            QUrl.fromLocalFile(str(self.run_dir))))
+        open_dir.clicked.connect(lambda: self.shown_dir and QDesktopServices.openUrl(
+            QUrl.fromLocalFile(str(self.shown_dir))))
         fl.addWidget(self.files_label)
         fl.addWidget(self.files_list, 1)
         fl.addWidget(open_dir, 0, Qt.AlignmentFlag.AlignLeft)
@@ -2353,7 +2363,7 @@ class MainWindow(QMainWindow):
             def prepare(log, cancel, progress):
                 summary = dem.ensure_tiles(tiles, hd, sdf_dir, source, clutter, url, log, cancel, progress)
                 # Sursol : tuiles des sites corrigées (sol nu sous les antennes), dans le dossier du calcul.
-                self.site_tiles += dem.write_site_tiles(run_dir, run_sites, hd, source, clutter, url, log)
+                self.site_tiles += dem.write_site_tiles(run_dir, run_sites, hd, source, clutter, url, log, cancel)
                 return summary
         else:
             converters = terrain.converter_candidates(params["arch"], self.settings["extra_paths"], hd)
@@ -2370,12 +2380,14 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(tr("Préparation du relief…"))
 
     def _terrain_done(self, summary, callback):
+        if self._closing:
+            return
         worker, self.terrain_worker = self.terrain_worker, None
         worker.wait()
         worker.deleteLater()
         if summary is None:
             self._console_write(tr("Préparation du relief interrompue.\n"))
-            self._finalize("interrompu")
+            self._finalize((N_("interrompu"), {}))
             return
         parts = [f"{len(summary[k])} {tr(label)}" for k, label in (
             ("present", N_("déjà présente(s)")), ("converted", N_("convertie(s)")),
@@ -2416,9 +2428,11 @@ class MainWindow(QMainWindow):
         self.process.readyReadStandardOutput.connect(self._read_output)
         self.process.finished.connect(self._finished)
         self.process.errorOccurred.connect(self._process_error)
-        self.process.start(str(exe), args)
-        self.process.closeWriteChannel()
         self.statusBar().showMessage(tr("Exécution de {exe} ({arch})…", exe=exe.name, arch=self.run_params["arch"]))
+        self.process.start(str(exe), args)
+        if self.process is None:          # échec du démarrage, déjà traité par _process_error
+            return
+        self.process.closeWriteChannel()
 
     def stop(self):
         if self.terrain_worker is not None:
@@ -2441,6 +2455,7 @@ class MainWindow(QMainWindow):
     def _process_error(self, error):
         if error == QProcess.ProcessError.FailedToStart:
             self._console_write(tr("\nImpossible de démarrer : {error}\n", error=self.process.errorString()))
+            self._start_failed = True
             self._finished(-1, QProcess.ExitStatus.CrashExit)
 
     def _finished(self, code, status):
@@ -2450,27 +2465,31 @@ class MainWindow(QMainWindow):
         process, self.process = self.process, None
         process.deleteLater()
 
-        problem = splat.describe_exit_code(code)
+        # Résultat : (texte français, valeurs), traduit à l'affichage (voir result_text).
+        failed_start, self._start_failed = self._start_failed, False
+        problem = N_("exécutable impossible à lancer") if failed_start else splat.exit_code_problem(code)
         if problem:
             arch = self.run_params["arch"]
-            result = tr("échec : {problem}", problem=problem)
-            self._console_write(tr(
-                "\n*** SPLAT! n'a pas pu démarrer : {problem}.\n"
-                "Ajoutez le dossier contenant les DLL requises au PATH de la version {arch} "
-                "(menu Fichier > Pré-requis…, ou Réglages…, bouton « Tester »).\n", problem=problem, arch=arch))
+            result = (N_("échec : {problem}"), {"problem": problem})
+            if not failed_start:
+                self._console_write(tr(
+                    "\n*** SPLAT! n'a pas pu démarrer : {problem}.\n"
+                    "Ajoutez le dossier contenant les DLL requises au PATH de la version {arch} "
+                    "(menu Fichier > Pré-requis…, ou Réglages…, bouton « Tester »).\n", problem=tr(problem), arch=arch))
         elif status == QProcess.ExitStatus.CrashExit:
-            result = N_("interrompu") if code in (-1, 0, 1, 62097) else tr("plantage ({code:#x})", code=code)
-        elif splat.describe_crash(code):
-            result = splat.describe_crash(code)
+            result = ((N_("interrompu"), {}) if code in (-1, 0, 1, 62097)
+                      else (N_("plantage ({code:#x})"), {"code": code}))
+        elif signal := splat.crash_signal(code):
+            result = (N_("plantage de SPLAT! ({signal})"), {"signal": signal})
             self._console_write(tr(
                 "\n*** {result}. Les fichiers produits avant l'arrêt sont conservés "
-                "(un rapport peut être vide).\n", result=result))
+                "(un rapport peut être vide).\n", result=result_text(result)))
         else:
-            result = N_("terminé") if code == 0 else tr("code {code}", code=code)
+            result = (N_("terminé"), {}) if code == 0 else (N_("code {code}"), {"code": code})
 
         # Tuiles signalées absentes par SPLAT! : téléchargement, conversion, puis une relance.
         missing = terrain.missing_from_output(self.splat_output)
-        if missing and result != "interrompu" and not problem:
+        if missing and result[0] != "interrompu" and not problem:
             if self.run_params["auto_terrain"] and not self.terrain_retried:
                 self.terrain_retried = True
                 self.pending_result = result
@@ -2536,18 +2555,19 @@ class MainWindow(QMainWindow):
                         self.frame_width.value(), self.coverage_blur.value() / 2):
                     self._console_write(tr("Carte aux bonnes proportions : {name}\n", name=written.name))
         elapsed = (datetime.datetime.now() - self.run_started).total_seconds()
-        self._console_write(tr("\n--- {result} en {elapsed:.1f} s ---\n", result=tr(result), elapsed=elapsed))
-        if result == "terminé":
+        label = result_text(result)
+        self._console_write(tr("\n--- {result} en {elapsed:.1f} s ---\n", result=label, elapsed=elapsed))
+        if result[0] == "terminé":
             self._set_progress(1.0, tr("Terminé en {elapsed:.1f} s", elapsed=elapsed))
         else:
-            self._set_progress(0.0, result[:1].upper() + result[1:])
-        self.history = storage.update_history(str(self.run_dir), status=result,
+            self._set_progress(0.0, label[:1].upper() + label[1:])
+        self.history = storage.update_history(str(self.run_dir), status=result[0], status_values=result[1],
                                               duration=round(elapsed, 1))
         self._refresh_history()
         self.history_table.selectRow(0)
         self.stop_action.setEnabled(False)
         self._refresh_state()
-        self.statusBar().showMessage(f"SPLAT! {tr(result)} ({elapsed:.1f} s)", 8000)
+        self.statusBar().showMessage(f"SPLAT! {label} ({elapsed:.1f} s)", 8000)
         try:
             (self.run_dir / "console.log").write_text(self.console.toPlainText(), encoding="utf-8")
         except OSError:
@@ -2569,7 +2589,7 @@ class MainWindow(QMainWindow):
         if not run_dir or not Path(run_dir).is_dir():
             self.files_label.setText(tr("Dossier de résultats introuvable.") if run_dir else "")
             return
-        self.run_dir = Path(run_dir)
+        self.shown_dir = Path(run_dir)
         images, texts, others = splat.collect_outputs(run_dir)
         self.files_label.setText(tr("Dossier : {folder}", folder=run_dir))
         for path in texts:
@@ -2581,11 +2601,11 @@ class MainWindow(QMainWindow):
             item = QListWidgetItem(f"{path.name}    ({size / 1024:.1f} Ko)")
             item.setData(Qt.ItemDataRole.UserRole, str(path))
             self.files_list.addItem(item)
-        log = self.run_dir / "console.log"
-        if load_console and log.exists():
+        log = self.shown_dir / "console.log"
+        if load_console and log.exists() and not self._busy():     # console réservée au calcul en cours
             self.console.setPlainText(log.read_text(encoding="utf-8", errors="replace"))
-        params = self._run_params_for(self.run_dir)
-        self.profile_request = (params, self.run_dir) if params and params["mode"] == "p2p" else None
+        params = self._run_params_for(self.shown_dir)
+        self.profile_request = (params, self.shown_dir) if params and params["mode"] == "p2p" else None
         self.profile_data = []
         self.profile_tx.blockSignals(True)
         self.profile_tx.clear()
@@ -2631,7 +2651,7 @@ class MainWindow(QMainWindow):
     def _export_profile(self):
         if not self.profile_view.profile:
             return
-        default = str(Path(self.run_dir or ".") / "profil_liaison.png")
+        default = str(Path(self.shown_dir or ".") / "profil_liaison.png")
         path, _ = QFileDialog.getSaveFileName(self, tr("Exporter le profil"), default, "PNG (*.png)")
         if path:
             self.profile_view.image().save(path)
@@ -3590,7 +3610,8 @@ class MainWindow(QMainWindow):
             values = [
                 entry.get("date", ""), entry.get("profile", ""),
                 f"{params['arch']} {params['variant']}", tr(splat.MODES.get(params["mode"], "")),
-                ", ".join(s["name"] for s in params["tx_sites"]), tr(entry.get("status", "")),
+                ", ".join(s["name"] for s in params["tx_sites"]),
+                result_text((entry.get("status", ""), entry.get("status_values") or {})),
             ]
             for col, value in enumerate(values):
                 self.history_table.setItem(row, col, QTableWidgetItem(value))
@@ -3604,7 +3625,8 @@ class MainWindow(QMainWindow):
     def _history_show(self):
         entry = self._history_entry()
         if entry:
-            self.console.clear()
+            if not self._busy():
+                self.console.clear()
             self.show_results(entry.get("run_dir"))
             self.results_tabs.setCurrentIndex(2 if self.image_combo.count() else 1)
 
@@ -3631,6 +3653,10 @@ class MainWindow(QMainWindow):
         if not entry:
             return
         run_dir = entry.get("run_dir")
+        if self._busy() and run_dir and self.run_dir and Path(run_dir) == Path(self.run_dir):
+            QMessageBox.information(self, tr("Retirer de l'historique"),
+                                    tr("Ce calcul est en cours : arrêtez-le avant de le retirer."))
+            return
         answer = QMessageBox.question(
             self, tr("Retirer de l'historique"),
             tr("Retirer cette exécution de l'historique ?\n\nOui : supprimer aussi son dossier de résultats\n"
@@ -3747,14 +3773,28 @@ class MainWindow(QMainWindow):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.parent if path == terrain.SDF_DIR else path)))
 
     def closeEvent(self, event):
+        if self._closing:                        # fermeture déjà en cours (attente du relief)
+            event.ignore()
+            return
         if self._busy():
             if QMessageBox.question(self, tr("Quitter"), tr("Une exécution est en cours. L'arrêter et quitter ?")) \
                     != QMessageBox.StandardButton.Yes:
                 event.ignore()
                 return
             if self.terrain_worker is not None:
+                # L'annulation interrompt srtm2sdf et les téléchargements ; on attend la fin du
+                # thread (le détruire en cours d'exécution ferait planter l'application).
+                self._closing = True             # _terrain_done ne relance plus rien
                 self.terrain_worker.cancel()
-                self.terrain_worker.wait(5000)
+                self.statusBar().showMessage(tr("Arrêt de la préparation du relief…"))
+                QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+                try:
+                    while not self.terrain_worker.wait(100):
+                        QApplication.processEvents()
+                finally:
+                    QApplication.restoreOverrideCursor()
+                self.history = storage.update_history(str(self.run_dir), status=N_("interrompu"),
+                                                      status_values={})
             if self.process is not None:
                 self.process.kill()
                 self.process.waitForFinished(3000)

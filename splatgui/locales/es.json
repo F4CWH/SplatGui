@@ -706,5 +706,8 @@
  " ; gnuplot absent (graphes gnuplot facultatifs)": "; gnuplot ausente (gráficos gnuplot opcionales)",
  "{d:.2f} {du} — sol {g:.0f} {hu} — visée {l:.0f} {hu} — dégagement {c:+.1f} {hu}": "{d:.2f} {du} — suelo {g:.0f} {hu} — visual {l:.0f} {hu} — despeje {c:+.1f} {hu}",
  "distance {d:.2f} {du}": "distancia {d:.2f} {du}",
- "dégagement minimal {c:+.1f} {hu} à {d:.2f} {du}": "despeje mínimo {c:+.1f} {hu} a {d:.2f} {du}"
+ "dégagement minimal {c:+.1f} {hu} à {d:.2f} {du}": "despeje mínimo {c:+.1f} {hu} a {d:.2f} {du}",
+ "exécutable impossible à lancer": "no se pudo lanzar el ejecutable",
+ "Ce calcul est en cours : arrêtez-le avant de le retirer.": "Este cálculo está en curso: deténgalo antes de quitarlo.",
+ "Arrêt de la préparation du relief…": "Deteniendo la preparación del relieve…"
 }

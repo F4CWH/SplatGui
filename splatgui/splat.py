@@ -145,16 +145,21 @@ def available_arches():
 MSYS_SIGNALS = {4: "SIGILL", 6: "SIGABRT", 7: "SIGBUS", 8: "SIGFPE", 11: "SIGSEGV"}
 
 
+def exit_code_problem(code):
+    """Problème de chargement (DLL…) : l'exécutable n'a pas pu démarrer. Texte non traduit."""
+    return WIN_LOAD_ERRORS.get(code & 0xFFFFFFFF)
+
+
 def describe_exit_code(code):
-    """Problème de chargement (DLL…) : l'exécutable n'a pas pu démarrer."""
-    message = WIN_LOAD_ERRORS.get(code & 0xFFFFFFFF)
+    """Problème de chargement (DLL…), traduit."""
+    message = exit_code_problem(code)
     return tr(message) if message else None
 
 
-def describe_crash(code):
-    """Plantage de SPLAT! en cours d'exécution, d'après la convention MSYS."""
+def crash_signal(code):
+    """Signal ayant arrêté SPLAT! en cours d'exécution, d'après la convention MSYS, ou None."""
     if code > 0 and code & 0xFF == 0 and (code >> 8) in MSYS_SIGNALS:
-        return tr("plantage de SPLAT! ({signal})", signal=MSYS_SIGNALS[code >> 8])
+        return MSYS_SIGNALS[code >> 8]
     return None
 
 
@@ -349,6 +354,23 @@ def build_arguments(params, tx_files, rx_file):
     return args
 
 
+def site_file_bases(params):
+    """Noms de base (sans extension) des fichiers de site : (émetteurs, récepteur ou None).
+    Deux sites de même nom reçoivent des noms distincts."""
+    used = set()
+
+    def base_for(site, prefix):
+        base = f"{prefix}_{safe_filename(site['name'])}"
+        while base.lower() in used:
+            base += "_"
+        used.add(base.lower())
+        return base
+
+    tx = [base_for(site, f"tx{index}") for index, site in enumerate(params["tx_sites"], start=1)]
+    rx = base_for(params["rx_site"], "rx") if params["mode"] == "p2p" else None
+    return tx, rx
+
+
 def prepare_run(params, settings, profile_name):
     """Crée le dossier d'exécution, y écrit les .qth/.lrp et renvoie
     (dossier, exécutable, arguments, environnement)."""
@@ -366,19 +388,10 @@ def prepare_run(params, settings, profile_name):
         run_dir = run_dir.with_name(f"{stamp}_{safe_filename(profile_name)}_{suffix}")
     run_dir.mkdir(parents=True)
 
-    used = set()
-
-    def write_site(site, prefix):
-        base = f"{prefix}_{safe_filename(site['name'])}"
-        while base.lower() in used:
-            base += "_"
-        used.add(base.lower())
-        (run_dir / f"{base}.qth").write_text(qth_text(site), encoding="latin-1", errors="replace")
-        return base
-
+    tx_bases, rx_base = site_file_bases(params)
     tx_files = []
-    for index, site in enumerate(params["tx_sites"], start=1):
-        base = write_site(site, f"tx{index}")
+    for base, site in zip(tx_bases, params["tx_sites"]):
+        (run_dir / f"{base}.qth").write_text(qth_text(site), encoding="latin-1", errors="replace")
         if params["lrp"]["enabled"]:
             (run_dir / f"{base}.lrp").write_text(lrp_text(params["lrp"]), encoding="ascii")
         if site.get("antenna"):
@@ -391,8 +404,9 @@ def prepare_run(params, settings, profile_name):
                                        float(site.get("tilt", 0)))
         tx_files.append(f"{base}.qth")
     rx_file = None
-    if params["mode"] == "p2p":
-        rx_file = write_site(params["rx_site"], "rx") + ".qth"
+    if rx_base:
+        (run_dir / f"{rx_base}.qth").write_text(qth_text(params["rx_site"]), encoding="latin-1", errors="replace")
+        rx_file = f"{rx_base}.qth"
 
     args = build_arguments(params, tx_files, rx_file)
 
@@ -415,11 +429,10 @@ def _quote(arg):
 
 def command_preview(params):
     """Ligne de commande indicative, pour l'aperçu dans l'interface."""
-    tx = [f"tx{i}_{safe_filename(s['name'])}.qth" for i, s in enumerate(params["tx_sites"], 1)]
-    rx = f"rx_{safe_filename(params['rx_site']['name'])}.qth" if params["mode"] == "p2p" else None
     exe = executable_path(params["arch"], params["variant"]).name
     try:
-        args = build_arguments(params, tx, rx)
+        tx_bases, rx_base = site_file_bases(params)
+        args = build_arguments(params, [f"{b}.qth" for b in tx_bases], rx_base and f"{rx_base}.qth")
     except (ValueError, KeyError) as exc:
         return tr("(paramètres invalides : {exc})", exc=exc)
     return " ".join([exe, *(_quote(a) for a in args)])

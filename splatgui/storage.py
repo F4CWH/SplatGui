@@ -331,8 +331,17 @@ def migrate_legacy_data():
 # --- Profils --------------------------------------------------------------------
 
 def _profile_path(name):
+    """Fichier du profil `name` : celui qui porte ce nom, sinon un nom de fichier libre. Deux noms
+    identiques une fois nettoyés (« a:b », « a_b ») ou à la casse près ont chacun leur fichier."""
     safe = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name).strip() or "_"
-    return PROFILES_DIR / f"{safe}.json"
+    path, index = PROFILES_DIR / f"{safe}.json", 1
+    while path.exists():
+        data = _read_json(path, None)
+        if (data.get("name", path.stem) if isinstance(data, dict) else path.stem) == name:
+            return path
+        index += 1
+        path = PROFILES_DIR / f"{safe}_{index}.json"
+    return path
 
 
 def list_profiles():
@@ -395,6 +404,18 @@ def add_history(entry):
     history.insert(0, entry)
     _save_history(history[:HISTORY_MAX])
     return history[:HISTORY_MAX]
+
+
+def close_stale_history(running, status):
+    """Au démarrage : les calculs encore notés `running` (application fermée ou plantée
+    pendant le calcul) passent à `status`. Renvoie l'historique."""
+    history = load_history()
+    stale = [e for e in history if isinstance(e, dict) and e.get("status") == running]
+    for entry in stale:
+        entry["status"] = status
+    if stale:
+        _save_history(history)
+    return history
 
 
 def update_history(run_dir, **fields):

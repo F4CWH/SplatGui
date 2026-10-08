@@ -262,8 +262,10 @@ def fill_voids(grid, void):
 def srtm_grid(tile, hd, url_template, log, cancel):
     """Tuile SRTM (téléchargée au besoin) en grille d'altitudes, ou None (pas de données)."""
     path = terrain.find_srtm(tile)
+    if hd and path is not None and len(terrain.read_hgt(path)) != terrain.SRTM1_SIZE:
+        path = None                                   # tuile 3" déposée à la main : inutilisable en HD
     if path is None:
-        if terrain._unavailable_marker(tile).exists():
+        if terrain.marker_valid(terrain._unavailable_marker(tile)):
             return None
         path = terrain.download(tile, url_template, log, cancel)
         if path is None:
@@ -286,7 +288,7 @@ def copernicus_grid(tile, hd, log, cancel):
     n = nodes(hd)
     if path.exists():
         return _load_grid(path, "<f4", n).astype(np.float64)
-    if _absent("copernicus", tile, hd).exists():
+    if terrain.marker_valid(_absent("copernicus", tile, hd)):
         return None
     lat, lon = tile
     url = COPERNICUS_URL.format(ns="N" if lat >= 0 else "S", lat=abs(lat), ew="E" if lon >= 0 else "W", lon=abs(lon))
@@ -322,9 +324,14 @@ def ign_grid(tile, hd, log, cancel):
         if cancel():
             raise terrain.Cancelled()
         request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        chunks = []
         with urllib.request.urlopen(request, timeout=300) as response:
-            data = response.read()
             kind = response.headers.get("Content-Type", "")
+            while chunk := response.read(256 * 1024):     # par morceaux : annulable en cours de route
+                if cancel():
+                    raise terrain.Cancelled()
+                chunks.append(chunk)
+        data = b"".join(chunks)
         if "bil" not in kind or len(data) != n * n * 4:
             raise RuntimeError(tr("Réponse inattendue du service IGN ({kind}, {size} octets).",
                                   kind=kind, size=len(data)))
@@ -453,9 +460,10 @@ def ensure_tiles(tiles, hd, sdf_dir, source, clutter, url_template, log, cancel=
     return summary
 
 
-def write_site_tiles(run_dir, sites, hd, source, clutter, url_template, log):
+def write_site_tiles(run_dir, sites, hd, source, clutter, url_template, log, cancel=lambda: False):
     """Sursol : copies des tuiles contenant les sites, avec la maille de chaque site ramenée
     au sol nu, écrites dans le dossier du calcul (lues par SPLAT! avant le dossier -d).
+    Les tuiles déjà écrites dans ce dossier (relance du calcul) sont conservées.
     Renvoie les fichiers écrits."""
     if not clutter.get("enabled"):
         return []
@@ -464,19 +472,33 @@ def write_site_tiles(run_dir, sites, hd, source, clutter, url_template, log):
     for site in sites:
         lat, lon = float(site["lat"]), float(site["lon"])
         lon = ((lon + 180) % 360) - 180
-        tile = (math.floor(lat), math.floor(lon))
-        row = int(round((tile[0] + 1 - lat) * (n - 1)))
-        col = int(round((lon - tile[1]) * (n - 1)))
-        by_tile.setdefault(tile, []).append((row, col))
+        tile_lat, tile_lon = math.floor(lat), math.floor(lon)
+        row = int(round((tile_lat + 1 - lat) * (n - 1)))
+        col = int(round((lon - tile_lon) * (n - 1)))
+        # Le SDF d'une tuile n'a ni la rangée nord ni la colonne est : ces nœuds sont ceux
+        # (rangée sud, colonne ouest) des tuiles voisines, que l'on corrige à la place.
+        if row == 0 and tile_lat < 89:
+            tile_lat, row = tile_lat + 1, n - 1
+        if col == n - 1:
+            tile_lon, col = ((tile_lon + 1 + 180) % 360) - 180, 0
+        by_tile.setdefault((tile_lat, tile_lon), []).append((row, col))
     written = []
     for tile, cells in by_tile.items():
-        bare, extra = tile_grids(tile, hd, source, clutter, url_template, log, lambda: False)
+        path = Path(run_dir) / terrain.sdf_file("", tile, hd).name
+        if path.exists():
+            continue
+        try:
+            bare, extra = tile_grids(tile, hd, source, clutter, url_template, log, cancel)
+        except terrain.Cancelled:
+            raise
+        except (OSError, urllib.error.URLError, ValueError, RuntimeError, zlib.error) as exc:
+            log("  " + tr("Relief {name} impossible : {exc}", name=terrain.tile_name(*tile), exc=exc) + "\n")
+            continue
         if bare is None or extra is None:
             continue
         extra = extra.copy()
         for row, col in cells:
             extra[row, col] = 0.0
-        path = Path(run_dir) / terrain.sdf_file("", tile, hd).name
         write_sdf(path, bare + extra, tile, hd)
         written.append(path)
         log("  " + tr("Sursol retiré à l'emplacement des sites : {name}", name=path.name) + "\n")

@@ -706,5 +706,8 @@
  " ; gnuplot absent (graphes gnuplot facultatifs)": "; gnuplot missing (gnuplot graphs are optional)",
  "{d:.2f} {du} — sol {g:.0f} {hu} — visée {l:.0f} {hu} — dégagement {c:+.1f} {hu}": "{d:.2f} {du} — ground {g:.0f} {hu} — line of sight {l:.0f} {hu} — clearance {c:+.1f} {hu}",
  "distance {d:.2f} {du}": "distance {d:.2f} {du}",
- "dégagement minimal {c:+.1f} {hu} à {d:.2f} {du}": "minimum clearance {c:+.1f} {hu} at {d:.2f} {du}"
+ "dégagement minimal {c:+.1f} {hu} à {d:.2f} {du}": "minimum clearance {c:+.1f} {hu} at {d:.2f} {du}",
+ "exécutable impossible à lancer": "executable could not be launched",
+ "Ce calcul est en cours : arrêtez-le avant de le retirer.": "This calculation is running: stop it before removing it.",
+ "Arrêt de la préparation du relief…": "Stopping terrain preparation…"
 }
