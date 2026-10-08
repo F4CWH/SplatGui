@@ -6,6 +6,8 @@ SPLAT!Gui prépare les fichiers d'entrée de SPLAT! (sites `.qth`, paramètres I
 
 Code source : <https://github.com/F4CWH/SplatGui>
 
+![Capture d'écran SPLAT!Gui](capture_splatgui.png)
+
 ## Fonctionnalités
 
 - **Modes d'analyse** : point à point (`-t` / `-r`), couverture en visibilité (`-c`), perte de trajet et champ (`-L`), jusqu'à 30 émetteurs ; versions x64 / x86, standard et HD.
