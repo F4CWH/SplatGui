@@ -3,14 +3,14 @@
   "last_params": {
     "arch": "x64",
     "variant": "standard",
-    "mode": "p2p",
+    "mode": "pathloss",
     "metric": true,
     "rx_height": 10.0,
     "tx_sites": [
       {
         "name": "TX1",
-        "lat": 0.0,
-        "lon": 0.0,
+        "lat": 0,
+        "lon": 0,
         "height": 10.0,
         "height_unit": "m",
         "antenna": "",
@@ -39,12 +39,12 @@
     },
     "values": {
       "m": "",
-      "R": "",
+      "R": "0",
       "f": "",
       "fz": "",
       "gc": "",
       "erp": "",
-      "db": ""
+      "db": "0"
     },
     "flags": {
       "n": false,
@@ -87,7 +87,7 @@
     "log": true,
     "extra_args": "",
     "erp_calc": {
-      "power": 10.0,
+      "power": 1.0,
       "cable": "",
       "attenuation": 10.0,
       "length": 10.0,
@@ -96,8 +96,8 @@
     }
   },
   "extra_paths": {
-    "x64": "",
-    "x86": ""
+    "x64": "deps\\x64",
+    "x86": "deps\\x86"
   },
   "runs_dir": "runs",
   "qth_dir": "qth",
@@ -109,10 +109,10 @@
     "basemap_opacity": 50,
     "coverage_opacity": 50,
     "coverage_visible": true,
-    "display_mode": "image",
+    "display_mode": "online",
     "relief_source": "srtm",
     "relief_opacity": 50,
-    "coverage_blur": 3,
+    "coverage_blur": 0,
     "crop": false,
     "aspect": true,
     "layers": [],
@@ -136,7 +136,7 @@
   },
   "picker": {
     "source": "osm",
-    "zoom": 17
+    "zoom": 2
   },
   "prereqs_offered": true
 }

@@ -947,6 +947,15 @@ class MainWindow(QMainWindow):
         self.stop_action.setEnabled(False)
         self.stop_action.triggered.connect(self.stop)
         bar.addAction(self.stop_action)
+        # Bouton « Arrêter » en rouge, même forme que « Lancer », plus pâle quand il est désactivé.
+        stop_button = bar.widgetForAction(self.stop_action)
+        stop_button.setStyleSheet(
+            "QToolButton { background: #c0392b; color: #ffffff; font-weight: bold; border: 1px solid #a5281c;"
+            " border-radius: 4px; padding: 0 10px; margin: 0 3px; }"
+            "QToolButton:hover { background: #d0493a; }"
+            "QToolButton:pressed { background: #a5281c; }"
+            "QToolButton:disabled { background: #e8b4ae; color: #fbeeec; border-color: #dc9d96; }")
+        stop_button.setFixedHeight(delete_button.sizeHint().height())
 
     def _build_menu(self):
         menu = self.menuBar()
