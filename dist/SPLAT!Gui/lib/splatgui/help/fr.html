@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8"><title>SPLAT! — Manuel de l’utilisateur</title></head>
+<body>
+<!-- Généré par splatgui/resources/make_help.py à partir de splat_fr.pdf ; chaque <h2> ouvre une rubrique du sommaire. -->
+
+<h2 id="nom">Nom</h2>
+<pre>splat — outil d’analyse de la propagation des signaux RF, de l’affaiblissement de parcours et du relief</pre>
+
+<h2 id="synopsis">Synopsis</h2>
+<p>splat</p>
+<pre>[-t site_émetteur.qth]
+[-r site_récepteur.qth]
+[-c hauteur de l’antenne de réception pour l’analyse de couverture en visibilité directe (pieds/mètres) (réel)]
+[-L hauteur de l’antenne de réception pour l’analyse de couverture ITM (pieds/mètres) (réel)]
+[-p profil_de_terrain.ext]
+[-e profil_d_élévation.ext]
+[-h profil_de_hauteur.ext]
+[-H profil_de_hauteur_normalisé.ext]
+[-l profil_ITM.ext]
+[-o carte_topographique.ppm]
+[-b fichier_limites_cartographiques.dat]
+[-s base_sites_villes.dat]
+[-d chemin_du_répertoire_sdf]
+[-m multiplicateur du rayon terrestre (réel)]
+[-f fréquence (MHz) pour le calcul des zones de Fresnel (réel)]
+[-R rayon de couverture maximal (miles/kilomètres) (réel)]
+[-dB seuil au-delà duquel les contours ne sont pas affichés]
+[-gc hauteur du sursol (pieds/mètres) (réel)]
+[-fz pourcentage de dégagement de la zone de Fresnel (60 par défaut)]
+[-ano nom du fichier de sortie alphanumérique]
+[-ani nom du fichier d’entrée alphanumérique]
+[-udt fichier_relief_utilisateur.dat]
+[-log fichier_journal.ext]
+[-n]
+[-N]
+[-nf]
+[-sc]
+[-dbm]
+[-ngs]
+[-geo]
+[-kml]
+[-gpsav]
+[-metric]
+[-olditm]</pre>
+
+<h2 id="description">Description</h2>
+<p><b>SPLAT!</b> est un puissant outil d’analyse de la propagation RF terrestre et du relief, couvrant le spectre de 20 MHz à 20 GHz. <b>SPLAT!</b> est un logiciel libre, conçu pour fonctionner sur des stations de travail Unix et Linux. Sa redistribution et/ou sa modification sont autorisées selon les termes de la licence publique générale GNU (GNU General Public License), version 2, publiée par la Free Software Foundation. L’intégration du code source de <b>SPLAT!</b> dans des applications propriétaires ou à code source fermé constitue une violation de cette licence et est strictement interdite.</p>
+<p><b>SPLAT!</b> est distribué dans l’espoir qu’il sera utile, mais SANS AUCUNE GARANTIE, sans même la garantie implicite de QUALITÉ MARCHANDE ou d’ADÉQUATION À UN USAGE PARTICULIER. Consultez la licence publique générale GNU pour plus de détails.</p>
+
+<h2 id="introduction">Introduction</h2>
+<p>Les applications de <b>SPLAT!</b> comprennent la visualisation, la conception et le calcul du bilan de liaison des réseaux sans fil étendus (WAN), des systèmes de radiocommunication commerciaux et radioamateurs au-dessus de 20 MHz, des faisceaux hertziens, la coordination de fréquences et les études de brouillage, ainsi que la prévision des zones de couverture de la radio et de la télévision terrestres analogiques et numériques.</p>
+<p><b>SPLAT!</b> fournit des données d’ingénierie de site RF telles que les distances orthodromiques et les azimuts entre sites, les angles d’élévation des antennes (inclinaison vers le haut), les angles de dépression (inclinaison vers le bas), la hauteur des antennes au-dessus du niveau moyen de la mer, la hauteur des antennes au-dessus du terrain moyen, les azimuts, distances et altitudes des obstacles connus, l’affaiblissement de parcours selon le modèle de terrain irrégulier (Irregular Terrain Model) et le niveau du signal reçu. Il indique en outre les hauteurs d’antenne minimales nécessaires pour dégager le relief, la première zone de Fresnel et tout pourcentage de la première zone de Fresnel défini par l’utilisateur.</p>
+<p><b>SPLAT!</b> produit des rapports, des graphiques et des cartes topographiques haute résolution représentant les trajets en visibilité directe ainsi que les contours régionaux d’affaiblissement de parcours et de niveau de signal, qui permettent de déterminer les zones de couverture attendues des émetteurs et des relais. Lors des analyses en visibilité directe et selon le modèle de terrain irrégulier faisant intervenir plusieurs sites d’émission ou de relais, <b>SPLAT!</b> détermine les zones de couverture individuelles et communes du réseau spécifié.</p>
+
+<h2 id="fichiers-dentree">Fichiers d’entrée</h2>
+<p><b>SPLAT!</b> est une application pilotée en ligne de commande qui lit ses données d’entrée dans plusieurs fichiers. Certains sont obligatoires au bon fonctionnement du programme, d’autres sont facultatifs. Les fichiers obligatoires comprennent les modèles numériques d’élévation sous forme de fichiers de données SPLAT (fichiers SDF), les fichiers de localisation des sites (fichiers QTH) et les fichiers de paramètres du modèle de terrain irrégulier (fichiers LRP). Les fichiers facultatifs comprennent les fichiers de localisation des villes, les fichiers de limites cartographiques, les fichiers de relief définis par l’utilisateur, les fichiers d’entrée d’affaiblissement de parcours, les fichiers de diagramme de rayonnement d’antenne et les fichiers de définition des couleurs.</p>
+
+<h2 id="fichiers-de-donnees-splat">Fichiers de données SPLAT</h2>
+<p><b>SPLAT!</b> importe les données topographiques sous forme de fichiers de données SPLAT (SDF). Ces fichiers peuvent être générés à partir de plusieurs sources. Aux États-Unis, les fichiers de données SPLAT peuvent être produits à partir des modèles numériques d’élévation (DEM) de l’U.S. Geological Survey à l’aide des utilitaires postdownload et usgs2sdf fournis avec <b>SPLAT!</b>. Les modèles numériques d’élévation de l’USGS compatibles avec ces utilitaires peuvent être téléchargés à l’adresse :</p>
+<p><a href="http://edcftp.cr.usgs.gov/pub/data/DEM/250/">http://edcftp.cr.usgs.gov/pub/data/DEM/250/</a></p>
+<p>Une résolution et une précision nettement meilleures peuvent être obtenues avec les modèles numériques d’élévation SRTM version 2, en particulier lorsqu’ils sont complétés par des données SDF issues de l’USGS. Ces modèles d’un degré sur un degré sont le produit de la mission topographique radar de la navette spatiale STS-99 et sont disponibles pour la plupart des régions peuplées du globe. Les fichiers de données SPLAT peuvent être générés à partir des données SRTM-3 à 3 secondes d’arc à l’aide de l’utilitaire srtm2sdf fourni. Les données SRTM-3 version 2.1 peuvent être obtenues par FTP anonyme à l’adresse :</p>
+<p><a href="http://dds.cr.usgs.gov/srtm/version2_1/SRTM3/">http://dds.cr.usgs.gov/srtm/version2_1/SRTM3/</a></p>
+<p>Notez que les noms des fichiers SRTM correspondent à la latitude et à la longitude du coin sud-ouest du jeu de données topographiques contenu dans le fichier. La région étudiée doit donc se situer au nord et à l’est de la latitude et de la longitude indiquées dans le nom du fichier SRTM.</p>
+<p>Une résolution et une précision encore supérieures peuvent être obtenues avec les données topographiques SRTM-1 version 2.1 à 1 seconde d’arc. Ces données sont disponibles pour les États-Unis et leurs territoires et possessions, et peuvent être téléchargées à l’adresse :</p>
+<p><a href="http://dds.cr.usgs.gov/srtm/version2_1/SRTM1/">http://dds.cr.usgs.gov/srtm/version2_1/SRTM1/</a></p>
+<p>Des fichiers SDF haute résolution destinés à <b>SPLAT!</b> HD peuvent être générés à partir de données dans ce format à l’aide de l’utilitaire srtm2sdf-hd.</p>
+<p>Malgré la meilleure précision des données SRTM, les jeux de données comportent quelques lacunes. Lorsque des lacunes sont détectées, les utilitaires srtm2sdf et srtm2sdf-hd les remplacent par les données correspondantes des fichiers SDF générés par usgs2sdf. Si aucune donnée SDF issue de l’USGS n’est disponible, les lacunes sont traitées par moyenne des pixels adjacents ou par remplacement direct.</p>
+<p>Les fichiers de données SPLAT contiennent des altitudes topographiques entières, en mètres, rapportées au niveau moyen de la mer, pour des régions du globe d’un degré sur un degré. <b>SPLAT!</b> peut lire les fichiers SDF au format standard (.sdf), tels que générés directement par les utilitaires usgs2sdf, srtm2sdf et srtm2sdf-hd, ou au format compressé bzip2 (.sdf.bz2). Les fichiers non compressés se lisant un peu plus vite que les fichiers compressés, <b>SPLAT!</b> recherche d’abord les données SDF nécessaires au format non compressé. S’il ne les trouve pas, <b>SPLAT!</b> les recherche ensuite au format compressé bzip2. Si aucun fichier SDF compressé n’est trouvé pour la région demandée, <b>SPLAT!</b> considère que la région se trouve en mer et attribue à ces zones l’altitude du niveau de la mer.</p>
+<p>Cette caractéristique de <b>SPLAT!</b> permet d’effectuer des analyses de trajet non seulement au-dessus des terres, mais aussi entre des zones côtières non représentées dans les données des modèles numériques d’élévation. Ce comportement souligne toutefois l’importance de disposer de tous les fichiers SDF nécessaires à la région analysée pour obtenir des résultats significatifs.</p>
+
+<h2 id="fichiers-de-localisation-des-sites-qth">Fichiers de localisation des sites (QTH)</h2>
+<p><b>SPLAT!</b> importe les informations de localisation des sites d’émission et de réception à partir de fichiers ASCII portant l’extension .qth. Les fichiers QTH contiennent le nom du site, sa latitude (positive au nord de l’équateur, négative au sud), sa longitude (en degrés Ouest de 0 à 360, ou en degrés Est de 0 à −360) et la hauteur de son antenne au-dessus du sol (AGL), chaque donnée étant séparée par un unique saut de ligne. La hauteur d’antenne est supposée exprimée en pieds, sauf si elle est suivie de la lettre m ou du mot meters, en majuscules ou en minuscules. La latitude et la longitude peuvent être exprimées au format décimal (74.6864) ou au format degrés, minutes, secondes (DMS) (74 41 11.0).</p>
+<p>Par exemple, un fichier de localisation décrivant la station de télévision WNJT-DT à Trenton, New Jersey (wnjt-dt.qth), pourrait se présenter ainsi :</p>
+<pre>WNJT-DT
+40.2828
+74.6864
+990.00</pre>
+<p>Chaque site d’émission et de réception analysé par <b>SPLAT!</b> doit être représenté par son propre fichier de localisation (QTH).</p>
+
+<h2 id="fichiers-de-parametres-du-modele-de-terrain-irregulier-lrp">Fichiers de paramètres du modèle de terrain irrégulier (LRP)</h2>
+<p>Les fichiers de paramètres du modèle de terrain irrégulier sont nécessaires à <b>SPLAT!</b> pour déterminer l’affaiblissement de parcours RF, le champ électrique ou le niveau de puissance reçu, que ce soit en mode point à point ou en mode de prévision de zone. Ces paramètres sont lus dans des fichiers portant le même nom de base que le fichier QTH du site émetteur, mais avec l’extension .lrp. Les fichiers LRP de <b>SPLAT!</b> ont le format suivant (wnjt-dt.lrp) :</p>
+<pre>15.000 ; Constante diélectrique du sol (permittivité relative)
+0.005 ; Conductivité du sol (siemens par mètre)
+301.000 ; Constante de réfraction atmosphérique (unités N)
+647.000 ; Fréquence en MHz (20 MHz à 20 GHz)
+5 ; Climat radio (5 = continental tempéré)
+0 ; Polarisation (0 = horizontale, 1 = verticale)
+0.50 ; Fraction des situations (50 % des emplacements)
+0.90 ; Fraction du temps (90 % du temps)
+46000.0 ; Puissance apparente rayonnée (PAR) en watts (facultatif)</pre>
+<p>(Commentaires traduits pour la lisibilité ; le fichier généré par le programme les contient en anglais.)</p>
+<p>Si aucun fichier LRP correspondant au fichier QTH du site émetteur n’est trouvé, <b>SPLAT!</b> recherche le fichier « splat.lrp » dans le répertoire de travail courant. Si ce fichier est introuvable, <b>SPLAT!</b> applique des paramètres par défaut et écrit dans le répertoire de travail courant un fichier « splat.lrp » contenant ces paramètres. L’utilisateur peut ensuite modifier ce fichier selon ses besoins.</p>
+<p>Les valeurs typiques de constante diélectrique et de conductivité du sol sont les suivantes :</p>
+<pre>Constante diélectrique Conductivité
+Eau salée 80 5,000
+Bon sol 25 0,020
+Eau douce 80 0,010
+Terrain marécageux 12 0,007
+Terres agricoles, forêt 15 0,005
+Sol moyen 15 0,005
+Montagne, sable 13 0,002
+Ville 5 0,001
+Sol médiocre 4 0,001</pre>
+<p>Les codes de climat radio utilisés par <b>SPLAT!</b> sont les suivants :</p>
+<pre>1 : Équatorial (Congo)
+2 : Continental subtropical (Soudan)
+3 : Maritime subtropical (côte ouest de l’Afrique)
+4 : Désertique (Sahara)
+5 : Continental tempéré
+6 : Maritime tempéré, au-dessus des terres (Royaume-Uni et côtes ouest des États-Unis et de
+l’Europe)
+7 : Maritime tempéré, au-dessus de la mer</pre>
+<p>Le climat continental tempéré est courant sur les grandes masses continentales de la zone tempérée, comme les États-Unis. Pour les trajets de moins de 100 km, il y a peu de différence entre les climats continental tempéré et maritime tempéré.</p>
+<p>Les septième et huitième paramètres du fichier .lrp correspondent à l’analyse statistique fournie par le modèle ITM. Dans cet exemple, <b>SPLAT!</b> renverra l’affaiblissement de parcours maximal se produisant dans 50 % des situations (fraction des situations, ou variabilité selon l’emplacement) pendant 90 % du temps (fraction du temps, ou variabilité temporelle). On le note souvent F(50,90) dans les études Longley-Rice. Aux États-Unis, le critère F(50,90) est généralement utilisé pour la télévision numérique (modulation VSB à 8 niveaux), et F(50,50) pour la radiodiffusion analogique (VSB-AM+NTSC).</p>
+<p>Pour plus d’informations sur les paramètres du modèle de propagation ITM, consultez : <a href="http://www.its.bldrdoc.gov/resources/radio-propagation-software/itm/itm.aspx">http://www.its.bldrdoc.gov/resources/radio-propagation-software/itm/itm.aspx</a> et <a href="http://www.softwright.com/faq/engineering/prop_longley_rice.html">http://www.softwright.com/faq/engineering/prop_longley_rice.html</a> Le dernier paramètre du fichier .lrp correspond à la puissance apparente rayonnée (PAR) de l’émetteur et est facultatif. S’il figure dans le fichier, <b>SPLAT!</b> calcule les niveaux de signal reçu et les contours de champ électrique lors des études ITM. S’il est omis, c’est l’affaiblissement de parcours qui est calculé. La PAR indiquée dans le fichier .lrp peut être remplacée à l’aide de l’option <code>-erp</code> de <b>SPLAT!</b>. Si le fichier .lrp contient une PAR et que l’on souhaite produire des contours d’affaiblissement de parcours plutôt que de champ électrique, il suffit de fixer la PAR à zéro avec l’option <code>-erp</code>, sans modifier le fichier .lrp.</p>
+
+<h2 id="fichiers-de-localisation-des-villes">Fichiers de localisation des villes</h2>
+<p>Les noms et positions de villes, de sites de pylônes ou d’autres points d’intérêt peuvent être importés et reportés sur les cartes topographiques générées par <b>SPLAT!</b>. <b>SPLAT!</b> importe ces noms et positions à partir de fichiers ASCII contenant le nom, la latitude et la longitude de chaque point d’intérêt. Les champs sont séparés par une virgule et chaque enregistrement par un unique saut de ligne. Comme pour les fichiers .qth, la latitude et la longitude peuvent être saisies au format décimal ou au format degrés, minutes, secondes (DMS).</p>
+<p>Par exemple (cities.dat) :</p>
+<pre>Teaneck, 40.891973, 74.014506
+Tenafly, 40.919212, 73.955892
+Teterboro, 40.859511, 74.058908
+Tinton Falls, 40.279966, 74.093924
+Toms River, 39.977777, 74.183580
+Totowa, 40.906160, 74.223310
+Trenton, 40.219922, 74.754665</pre>
+<p>Cinq fichiers de villes distincts au maximum peuvent être importés à la fois, sans limite de taille. <b>SPLAT!</b> lit les données de villes selon le principe « premier arrivé, premier servi » et ne place que les points dont les étiquettes n’entrent pas en conflit avec celles des points lus précédemment dans le fichier en cours ou dans les fichiers précédents. Ce comportement limite l’encombrement des cartes topographiques générées par <b>SPLAT!</b>, mais impose de placer les lieux importants au début du premier fichier de villes, et les lieux moins importants plus bas dans la liste ou dans les fichiers suivants.</p>
+<p>Les fichiers de villes peuvent être créés manuellement avec n’importe quel éditeur de texte, importés d’autres sources ou dérivés des données de l’U.S. Census Bureau à l’aide de l’utilitaire citydecoder fourni avec <b>SPLAT!</b>. Ces données sont disponibles gratuitement sur Internet à l’adresse <a href="http://web.archive.org/web/20130331172800/http://www.census.gov/geo/www/cob/bdy_files.html">http://web.archive.org/web/20130331172800/http://www.census.gov/geo/www/cob/bdy_files.html</a> et doivent être au format ASCII.</p>
+
+<h2 id="fichiers-de-limites-cartographiques">Fichiers de limites cartographiques</h2>
+<p>Des données de limites cartographiques peuvent aussi être importées pour tracer les limites des villes, des comtés ou des États sur les cartes topographiques générées par <b>SPLAT!</b>. Ces données doivent se présenter sous la forme de fichiers de limites cartographiques ARC/INFO Ungenerate (format ASCII), disponibles auprès de l’U.S. Census Bureau sur Internet aux adresses <a href="http://web.archive.org/web/20130331144934/http://www.census.gov/geo/www/cob/co2000.html#ascii">http://web.archive.org/web/20130331144934/http://www.census.gov/geo/www/cob/co2000.html#ascii</a> et <a href="http://web.archive.org/web/20130507075658/http://www.census.gov/geo/www/cob/pl2000.html#ascii">http://web.archive.org/web/20130507075658/http://www.census.gov/geo/www/cob/pl2000.html#ascii</a>. Cinq fichiers de limites cartographiques distincts au maximum peuvent être importés à la fois. Il est inutile d’importer les limites des États si celles des comtés ont déjà été importées.</p>
+
+<h2 id="fonctionnement-du-programme">Fonctionnement du programme</h2>
+<p><b>SPLAT!</b> se lance en ligne de commande à l’aide d’une série d’options et d’arguments. <b>SPLAT!</b> étant une application gourmande en processeur et en mémoire, ce type d’interface réduit la charge et se prête bien aux traitements scriptés (par lots). La priorité d’ordonnancement processeur et mémoire de <b>SPLAT!</b> peut être modifiée avec la commande Unix nice.</p>
+<p>Le nombre et le type d’options passées à <b>SPLAT!</b> déterminent son mode de fonctionnement et la manière dont les données de sortie sont produites. Presque toutes les options de <b>SPLAT!</b> peuvent être combinées dans n’importe quel ordre sur la ligne de commande. Il suffit de taper splat sur la ligne de commande pour obtenir un résumé des options de <b>SPLAT!</b> :</p>
+<pre>--==[ SPLAT! v1.4.2 — Options disponibles... ]==--
+-t fichier(s) txsite.qth (4 max. avec -c, 30 max. avec -L)
+-r fichier rxsite.qth
+-c trace la couverture en visibilité directe du ou des émetteurs avec
+une antenne de réception à X pieds/mètres au-dessus du sol
+-L trace la carte d’affaiblissement de parcours de l’émetteur pour un
+récepteur à X pieds/mètres au-dessus du sol
+-s nom(s) du ou des fichiers de villes/sites à importer (5 max.)
+-b nom(s) du ou des fichiers de limites cartographiques à importer (5 max.)
+-p nom du graphique de profil de terrain à tracer
+-e nom du graphique d’élévation du terrain à tracer
+-h nom du graphique de hauteur du terrain à tracer
+-H nom du graphique de hauteur du terrain normalisée à tracer
+-l nom du graphique d’affaiblissement de parcours à tracer
+-o nom de la carte topographique à générer (.ppm)
+-u nom du fichier de relief défini par l’utilisateur à importer
+-d chemin du répertoire des fichiers sdf (remplace le chemin du
+fichier ~/.splat_path)
+-m multiplicateur du rayon terrestre
+-n ne pas tracer les trajets en visibilité directe sur les cartes .ppm
+-N ne pas produire les rapports de site ou d’obstacles superflus
+-f fréquence pour le calcul de la zone de Fresnel (MHz)
+-R modifie la portée par défaut de -c ou -L (miles/kilomètres)
+-sc affiche des niveaux de contour lissés plutôt que quantifiés
+-db seuil au-delà duquel les contours ne sont pas affichés
+-nf ne pas tracer les zones de Fresnel sur les graphiques de hauteur
+-fz pourcentage de dégagement de la zone de Fresnel (60 par défaut)
+-gc hauteur du sursol (pieds/mètres)
+-ngs affiche le relief en niveaux de gris comme du blanc dans les .ppm
+-erp remplace la PAR du fichier .lrp (watts)
+-ano nom du fichier de sortie alphanumérique
+-ani nom du fichier d’entrée alphanumérique
+-udt nom du fichier de relief défini par l’utilisateur
+-kml génère une sortie compatible Google Earth (.kml)
+-geo génère un fichier de géoréférencement Xastir .geo (avec sortie .ppm)
+-dbm trace des contours de puissance reçue plutôt que de champ électrique
+-log copie la ligne de commande dans ce fichier de sortie
+-gpsav conserve les fichiers de travail temporaires de gnuplot après
+l’exécution de SPLAT!
+-metric utilise les unités métriques plutôt qu’impériales pour toutes les
+entrées/sorties
+-olditm utilise l’ancien modèle de propagation ITM plutôt que le nouveau ITWOM</pre>
+<p>(Descriptions traduites ; le programme les affiche en anglais.)</p>
+<p>Les options de ligne de commande de splat et de splat-hd sont identiques. L’option <code>-log</code> enregistre toutes les options utilisées dans un fichier de votre choix (logfile.txt) :</p>
+<pre>splat -t tx_site -r rx_site -s nj_cities -o topo_map -log logfile.txt</pre>
+<p><b>SPLAT!</b> fonctionne selon deux modes distincts : le mode point à point et le mode prévision de zone. L’utilisateur peut choisir un modèle de propagation en visibilité directe (LOS) ou selon le modèle de terrain irrégulier (ITM). Pour les analyses en visibilité directe, on peut spécifier le rayon terrestre réel, le modèle de la Terre aux quatre tiers ou tout autre rayon terrestre défini par l’utilisateur.</p>
+
+<h2 id="analyse-point-a-point">Analyse point à point</h2>
+<p><b>SPLAT!</b> permet d’effectuer une analyse de relief en visibilité directe entre deux sites donnés. Par exemple :</p>
+<pre>splat -t tx_site.qth -r rx_site.qth</pre>
+<p>lance une analyse de relief en visibilité directe entre l’émetteur défini dans tx_site.qth et le récepteur défini dans rx_site.qth avec un modèle de rayon terrestre réel, et écrit un rapport d’analyse de trajet <b>SPLAT!</b> dans le répertoire de travail courant. Ce rapport détaille les sites d’émission et de réception et indique la position de tout obstacle détecté sur le trajet en visibilité directe. Si un obstacle peut être franchi en surélevant l’antenne de réception, <b>SPLAT!</b> indique la hauteur d’antenne minimale nécessaire pour établir une visibilité directe entre l’émetteur et le récepteur. Notez que les unités impériales (miles, pieds) sont utilisées, sauf si l’option <code>-metric</code> est ajoutée à la ligne de commande de <b>SPLAT!</b> :</p>
+<pre>splat -t tx_site.qth -r rx_site.qth -metric</pre>
+<p>Si l’antenne doit être surélevée de façon importante, ce calcul peut prendre quelques instants. Notez que les résultats fournis sont les valeurs minimales nécessaires à l’existence d’un trajet en visibilité directe et que, dans ce cas simple, ils ne tiennent pas compte des exigences de dégagement de la zone de Fresnel.</p>
+<p><b>SPLAT!</b> suppose l’extension qth pour les fichiers QTH ; elle est donc facultative dans les arguments de <code>-t</code> et <code>-r</code>. <b>SPLAT!</b> lit automatiquement tous les fichiers de données SPLAT nécessaires à l’analyse du relief entre les sites spécifiés. Il recherche d’abord les fichiers SDF dans le répertoire de travail courant. S’il ne les y trouve pas, il les recherche dans le chemin indiqué par l’option <code>-d</code> :</p>
+<pre>splat -t tx_site -r rx_site -d /cdrom/sdf/</pre>
+<p>Un répertoire externe peut être indiqué en plaçant un fichier « .splat_path » dans le répertoire personnel de l’utilisateur. Ce fichier doit contenir le chemin complet du répertoire de dernier recours où se trouvent tous les fichiers SDF. Le chemin figurant dans le fichier $HOME/.splat_path doit tenir sur une seule ligne de texte ASCII :</p>
+<pre>/opt/splat/sdf/</pre>
+<p>et peut être créé avec n’importe quel éditeur de texte.</p>
+<p>Un graphique du profil de terrain entre le récepteur et l’émetteur, en fonction de la distance au récepteur, peut être généré en ajoutant l’option <code>-p</code> :</p>
+<pre>splat -t tx_site -r rx_site -p terrain_profile.png</pre>
+<p><b>SPLAT!</b> fait appel à gnuplot pour générer les graphiques. L’extension du nom de fichier indiquée à <b>SPLAT!</b> détermine le format du graphique produit. L’extension .png produit une image PNG couleur de 640×480, tandis que .ps ou .postscript produisent une sortie PostScript. De nombreux autres formats sont disponibles, comme GIF, Adobe Illustrator, AutoCAD dxf ou LaTeX. Consultez gnuplot et sa documentation pour connaître tous les formats de sortie pris en charge.</p>
+<p>Un graphique des angles d’élévation sous-tendus par le relief entre le récepteur et l’émetteur, en fonction de la distance au récepteur, peut être généré avec l’option <code>-e</code> :</p>
+<pre>splat -t tx_site -r rx_site -e elevation_profile.png</pre>
+<p>Le graphique ainsi produit montre les angles d’élévation et de dépression dus au relief entre le récepteur et le site émetteur, vus depuis la position du récepteur. Une seconde courbe est tracée entre le bord gauche du graphique (position du récepteur) et la position de l’antenne d’émission à droite. Elle représente l’angle d’élévation nécessaire à l’existence d’un trajet en visibilité directe entre le récepteur et l’émetteur. Si cette courbe coupe le profil d’élévation en un point quelconque, cela indique qu’il n’existe pas de trajet en visibilité directe dans les conditions données, et les obstacles sont alors clairement identifiables sur le graphique au(x) point(s) d’intersection.</p>
+<p>Un graphique montrant la hauteur du terrain par rapport au trajet en visibilité directe entre l’émetteur et le récepteur peut être généré avec l’option <code>-h</code> :</p>
+<pre>splat -t tx_site -r rx_site -h height_profile.png</pre>
+<p>Un graphique de la hauteur du terrain normalisée par rapport aux hauteurs des antennes d’émission et de réception s’obtient avec l’option <code>-H</code> :</p>
+<pre>splat -t tx_site -r rx_site -H normalized_height_profile.png</pre>
+<p>La courbure de la Terre est également tracée dans ce mode.</p>
+<p>La première zone de Fresnel et 60 % de celle-ci peuvent être ajoutés aux graphiques de profil de hauteur avec l’option <code>-f</code>, en indiquant la fréquence (en MHz) à laquelle la zone de Fresnel doit être modélisée :</p>
+<pre>splat -t tx_site -r rx_site -f 439.250 -H normalized_height_profile.png</pre>
+<p>Un dégagement de la zone de Fresnel autre que 60 % peut être spécifié avec l’option <code>-fz</code>, comme suit :</p>
+<pre>splat -t tx_site -r rx_site -f 439.250 -fz 75 -H height_profile2.png</pre>
+<p>Un graphique de l’affaiblissement de parcours ITM peut être tracé avec l’option <code>-l</code> :</p>
+<pre>splat -t tx_site -r rx_site -l path_loss_profile.png</pre>
+<p>Comme précédemment, l’ajout de l’option <code>-metric</code> force le tracé des graphiques en unités métriques. L’option <code>-gpsav</code> indique à <b>SPLAT!</b> de conserver (au lieu de les supprimer) les fichiers de travail de gnuplot générés pendant son exécution, ce qui permet à l’utilisateur de les modifier et de relancer gnuplot s’il le souhaite.</p>
+<p>Lors d’une analyse point à point, un rapport d’analyse de trajet <b>SPLAT!</b> est généré sous forme de fichier texte avec l’extension .txt. Ce rapport contient les azimuts et distances entre l’émetteur et le récepteur, ainsi que l’affaiblissement en espace libre et l’affaiblissement ITM pour le trajet analysé. Le mode de propagation du trajet est indiqué parmi les suivants : Line-of-Sight (visibilité directe), Single Horizon (horizon simple), Double Horizon (double horizon), Diffraction Dominant (diffraction prédominante) ou Troposcatter Dominant (diffusion troposphérique prédominante). De plus, si le récepteur se trouve au sommet d’un obstacle unique ou au sommet d’un second obstacle, <b>SPLAT!</b> indique RX at Peak Terrain Along Path (récepteur au point culminant du trajet) lorsqu’il utilise le modèle de propagation ITWOM.</p>
+<p>Les distances et positions des obstacles connus sur le trajet entre l’émetteur et le récepteur sont également fournies. Si la puissance apparente rayonnée de l’émetteur est indiquée dans le fichier .lrp correspondant, le rapport d’analyse de trajet fournit aussi le niveau de signal prévu et la tension aux bornes de l’antenne au point de réception.</p>
+<p>Pour déterminer le rapport signal sur bruit (SNR) en un point distant où le bruit aléatoire de Johnson (bruit thermique) est le principal facteur limitant la réception :</p>
+<p>SNR = T − NJ − L + G − NF</p>
+<p>où T est la PAR de l’émetteur en dBW dans la direction du récepteur, NJ le bruit de Johnson en dBW (−136 dBW pour un canal de télévision de 6 MHz), L l’affaiblissement de parcours fourni par <b>SPLAT!</b> en dB (exprimé en valeur positive), G le gain de l’antenne de réception en dB par rapport à l’isotrope, et NF le facteur de bruit du récepteur en dB.</p>
+<p>T peut se calculer ainsi :</p>
+<p>T = TI + GT</p>
+<p>où TI est la puissance RF effectivement fournie à l’antenne d’émission en dBW et GT le gain de l’antenne d’émission (par rapport à l’isotrope) dans la direction du récepteur (ou de l’horizon si le récepteur se trouve au-delà de l’horizon).</p>
+<p>Pour calculer la marge de signal disponible au-delà du minimum nécessaire pour atteindre un rapport signal sur bruit donné :</p>
+<p>Signal_Margin = SNR − S</p>
+<p>où S est le rapport signal sur bruit minimal requis (15,5 dB pour la télévision numérique ATSC (VSB à 8 niveaux), 42 dB pour la télévision analogique NTSC).</p>
+<p><b>SPLAT!</b> peut générer une carte topographique pour visualiser le trajet entre l’émetteur et le récepteur sous un autre angle. Les cartes topographiques générées par <b>SPLAT!</b> représentent les altitudes selon une échelle de gris logarithmique, les altitudes les plus élevées apparaissant dans les gris les plus clairs. La dynamique de l’image s’étend entre l’altitude la plus haute et la plus basse présentes sur la carte. Seule exception : le niveau de la mer, représenté en bleu.</p>
+<p>La sortie topographique s’obtient avec l’option <code>-o</code> :</p>
+<pre>splat -t tx_site -r rx_site -o topo_map.ppm</pre>
+<p><b>SPLAT!</b> suppose l’extension .ppm pour le fichier de sortie ; elle est donc facultative.</p>
+<p>Dans cet exemple, topo_map.ppm montrera les positions des sites d’émission et de réception spécifiés. En outre, le trajet orthodromique entre les deux sites sera tracé sur les points pour lesquels il existe un trajet dégagé vers l’émetteur, pour une antenne de réception de même hauteur que celle du site récepteur (définie dans rx_site.qth).</p>
+<p>Il peut être utile d’enrichir la carte topographique avec les noms et positions de villes, de sites de pylônes ou d’autres lieux importants. Un fichier de villes peut être transmis à <b>SPLAT!</b> avec l’option <code>-s</code> :</p>
+<pre>splat -t tx_site -r rx_site -s cities.dat -o topo_map</pre>
+<p>Jusqu’à cinq fichiers de villes distincts peuvent être transmis à <b>SPLAT!</b> à la fois après l’option <code>-s</code>.</p>
+<p>Les limites des comtés et des États peuvent être ajoutées à la carte en indiquant jusqu’à cinq fichiers de limites cartographiques de l’U.S. Census Bureau avec l’option <code>-b</code> :</p>
+<pre>splat -t tx_site -r rx_site -b co34_d00.dat -o topo_map</pre>
+<p>Lorsque plusieurs sites d’émission sont utilisés, jusqu’à quatre sites peuvent être transmis à <b>SPLAT!</b> à la fois pour analyse :</p>
+<pre>splat -t tx_site1 tx_site2 tx_site3 tx_site4 -r rx_site -p profile.png</pre>
+<p>Dans cet exemple, <b>SPLAT!</b> générera quatre profils de terrain et rapports d’obstacles distincts. Une carte topographique unique peut être demandée avec l’option <code>-o</code> ; les trajets en visibilité directe entre chaque émetteur et le site récepteur indiqué y seront tracés, chacun dans sa propre couleur. Le trajet entre le premier émetteur et le récepteur sera en vert, celui entre le deuxième émetteur et le récepteur en cyan, celui entre le troisième émetteur et le récepteur en violet, et celui entre le quatrième émetteur et le récepteur en terre de Sienne.</p>
+<p>Les cartes topographiques générées par <b>SPLAT!</b> sont des images Portable PixMap (PPM) TrueColor 24 bits. Elles peuvent être affichées, modifiées ou converties dans d’autres formats graphiques avec des logiciels de visualisation d’images courants tels que xv, The GIMP, ImageMagick et XPaint. Le format PNG est vivement recommandé pour stocker sans perte et en compressé les fichiers topographiques générés par <b>SPLAT!</b>. L’utilitaire en ligne de commande d’ImageMagick convertit facilement les fichiers PPM de <b>SPLAT!</b> au format PNG :</p>
+<pre>convert splat_map.ppm splat_map.png</pre>
+<p>Un autre excellent utilitaire en ligne de commande de conversion PPM vers PNG est disponible à l’adresse <a href="http://www.libpng.org/pub/png/book/sources.html">http://www.libpng.org/pub/png/book/sources.html</a>. En dernier recours, les fichiers PPM peuvent être compressés avec l’utilitaire bzip2 et lus directement dans ce format par The GIMP.</p>
+<p>L’option <code>-ngs</code> affecte la couleur blanche à tout le relief et peut servir à générer une carte dépourvue de relief :</p>
+<pre>splat -t tx_site -r rx_site -b co34_d00.dat -ngs -o white_map</pre>
+<p>L’image .ppm obtenue peut être convertie au format .png avec un fond transparent grâce à l’utilitaire convert d’ImageMagick :</p>
+<pre>convert -transparent "#FFFFFF" white_map.ppm transparent_map.png</pre>
+
+<h2 id="analyse-de-couverture-regionale">Analyse de couverture régionale</h2>
+<p><b>SPLAT!</b> peut analyser un site d’émission ou de relais, ou un réseau de sites, et prévoir la couverture régionale de chacun des sites spécifiés. Dans ce mode, <b>SPLAT!</b> peut générer une carte topographique montrant la zone de couverture géométrique en visibilité directe des sites, en fonction de la position de chaque site et de la hauteur de l’antenne de réception devant communiquer avec le site considéré. <b>SPLAT!</b> effectue une analyse régionale avec l’option <code>-c</code>, comme suit :</p>
+<pre>splat -t tx_site -c 30.0 -s cities.dat -b co34_d00.dat -o tx_coverage</pre>
+<p>Dans cet exemple, <b>SPLAT!</b> génère une carte topographique nommée tx_coverage.ppm qui montre la couverture régionale prévue en visibilité directe de tx_site vers des points de réception dont les antennes se trouvent à 30,0 pieds au-dessus du sol (AGL). Si l’option - metric est utilisée, l’argument qui suit l’option <code>-c</code> est interprété en mètres et non en pieds. Le contenu de cities.dat est reporté sur la carte, de même que les limites cartographiques contenues dans le fichier co34_d00.dat.</p>
+<p>Lors du tracé des trajets en visibilité directe et des zones de couverture régionale, <b>SPLAT!</b> ne tient pas compte par défaut des effets de la réfraction atmosphérique. Ce comportement peut toutefois être modifié avec l’option de multiplicateur du rayon terrestre (<code>-m</code>) :</p>
+<pre>splat -t wnjt-dt -c 30.0 -m 1.333 -s cities.dat -b counties.dat -o map.ppm</pre>
+<p>Un multiplicateur de rayon terrestre de 1,333 indique à <b>SPLAT!</b> d’utiliser le modèle de la « Terre aux quatre tiers » pour l’analyse de propagation en visibilité directe. L’utilisateur peut choisir tout multiplicateur de rayon terrestre approprié.</p>
+<p>Lors d’une analyse régionale, <b>SPLAT!</b> génère un rapport de site pour chaque station analysée. Ces rapports détaillent la position géographique du site, son altitude au-dessus du niveau moyen de la mer, la hauteur de l’antenne au-dessus du niveau moyen de la mer, la hauteur de l’antenne au-dessus du terrain moyen et l’altitude du terrain moyen calculée dans les directions 0, 45, 90, 135, 180, 225, 270 et 315 degrés d’azimut.</p>
+
+<h2 id="determination-de-plusieurs-zones-de-couverture-en-visibilite-directe">Détermination de plusieurs zones de couverture en visibilité directe</h2>
+<p><b>SPLAT!</b> peut aussi afficher sur une même carte topographique les zones de couverture en visibilité directe de quatre sites d’émission distincts au maximum. Par exemple :</p>
+<pre>splat -t site1 site2 site3 site4 -c 10.0 -metric -o network.ppm</pre>
+<p>trace la couverture régionale en visibilité directe de site1, site2, site3 et site4 pour une antenne de réception située à 10,0 mètres audessus du sol. Une carte topographique est ensuite écrite dans le fichier network.ppm. Les zones de couverture en visibilité directe des émetteurs sont tracées dans les couleurs suivantes (avec leurs valeurs RVB en décimal) :</p>
+<pre>site1 : Vert (0,255,0)
+site2 : Cyan (0,255,255)
+site3 : Violet moyen (147,112,219)
+site4 : Terre de Sienne 1 (255,130,71)
+site1 + site2 : Jaune (255,255,0)
+site1 + site3 : Rose (255,192,203)
+site1 + site4 : Vert-jaune (173,255,47)
+site2 + site3 : Orange (255,165,0)
+site2 + site4 : Vert d’eau foncé 1 (193,255,193)
+site3 + site4 : Turquoise foncé (0,206,209)
+site1 + site2 + site3 : Vert foncé (0,100,0)
+site1 + site2 + site4 : Amande blanchie (255,235,205)
+site1 + site3 + site4 : Vert printemps moyen (0,250,154)
+site2 + site3 + site4 : Beige brun (210,180,140)
+site1 + site2 + site3 + site4 : Or 2 (238,201,0)</pre>
+<p>Si l’on crée des fichiers .qth distincts représentant un même site mais avec des hauteurs d’antenne différentes, <b>SPLAT!</b> peut générer une carte topographique unique montrant la couverture régionale de quatre emplacements distincts au maximum sur un même pylône.</p>
+
+<h2 id="analyse-daffaiblissement-de-parcours">Analyse d’affaiblissement de parcours</h2>
+<p>Si l’option <code>-c</code> est remplacée par l’option <code>-L</code>, on peut générer pour le ou les sites émetteurs spécifiés une carte d’affaiblissement de parcours ITM, une carte de champ électrique ou une carte de puissance reçue. Le type d’analyse dépend de la présence ou non d’une option <code>-erp</code> suivie d’un argument positif (ou d’une PAR équivalente dans le fichier .lrp correspondant), ou de la présence ou non de l’option <code>-dBm</code>. L’exemple suivant génère une carte d’affaiblissement de parcours ITM :</p>
+<pre>splat -t wnjt -L 30.0 -s cities.dat -b co34_d00.dat -o path_loss_map</pre>
+<p>Dans ce mode, <b>SPLAT!</b> génère une carte multicolore illustrant les niveaux de signal attendus dans les zones entourant le site émetteur. Une légende au bas de la carte associe chaque couleur à une plage d’affaiblissement de parcours en décibels.</p>
+<p>L’option <code>-db</code> permet de fixer un seuil au-delà duquel les contours ne sont pas tracés sur la carte. Par exemple, si un affaiblissement de parcours supérieur à −140 dB n’a pas d’intérêt pour l’étude en cours, on peut limiter le tracé d’affaiblissement de <b>SPLAT!</b> à la région délimitée par le contour d’atténuation de 140 dB, comme suit :</p>
+<pre>splat -t wnjt-dt -L 30.0 -s cities.dat -b co34_d00.dat -db 140 -o plot.ppm</pre>
+<p>Le seuil de contour d’affaiblissement peut être exprimé en valeur positive ou négative.</p>
+<p>La portée de l’analyse d’affaiblissement de parcours peut être modifiée à une distance choisie par l’utilisateur avec l’option <code>-R</code>. L’argument doit être donné en miles (ou en kilomètres si l’option <code>-metric</code> est utilisée). Si la portée indiquée dépasse l’étendue de la carte topographique générée, <b>SPLAT!</b> effectue les calculs d’affaiblissement ITM jusqu’aux quatre coins de la carte de prévision de zone.</p>
+<p>Les couleurs utilisées pour représenter les zones de contour sur les cartes de couverture générées par <b>SPLAT!</b> peuvent être personnalisées en créant ou en modifiant les fichiers de définition des couleurs de <b>SPLAT!</b>. Ces fichiers portent le même nom de base que le fichier .qth de l’émetteur, avec les extensions .lcf, .scf et .dcf. Si le fichier nécessaire n’existe pas dans le répertoire de travail courant au lancement de <b>SPLAT!</b>, un fichier contenant les paramètres de couleur par défaut, modifiable à la main par l’utilisateur, est écrit dans le répertoire courant.</p>
+<p>Lorsqu’une analyse ITM régionale est effectuée et que la PAR de l’émetteur n’est pas indiquée ou est nulle, <b>SPLAT!</b> lit dans le répertoire de travail courant le fichier de définition des couleurs d’affaiblissement .lcf correspondant au site émetteur (.qth). Si aucun fichier .lcf correspondant n’est trouvé, <b>SPLAT!</b> génère automatiquement un fichier par défaut, modifiable à la main par l’utilisateur. Un fichier de définition des couleurs d’affaiblissement de parcours a la structure suivante (wnjt-dt.lcf) :</p>
+<pre>; SPLAT! Auto-generated Path-Loss Color Definition ("wnjt-dt.lcf") File
+;
+; Format for the parameters held in this file is as follows:
+;
+; dB: red, green, blue
+;
+; ...where "dB" is the path loss (in dB) and
+; "red", "green", and "blue" are the corresponding RGB color
+; definitions ranging from 0 to 255 for the region specified.
+;
+; The following parameters may be edited and/or expanded
+; for future runs of SPLAT! A total of 32 contour regions
+; may be defined in this file.
+;
+;
+80: 255, 0, 0
+90: 255, 128, 0
+100: 255, 165, 0
+110: 255, 206, 0
+120: 255, 255, 0
+130: 184, 255, 0
+140: 0, 255, 0
+150: 0, 208, 0
+160: 0, 196, 196
+170: 0, 148, 255
+180: 80, 80, 255
+190: 0, 38, 255
+200: 142, 63, 255
+210: 196, 54, 255
+220: 255, 0, 255
+230: 255, 194, 204</pre>
+<p>(Contenu du fichier tel que généré par le programme. Traduction des commentaires : le format des paramètres est « dB : rouge, vert, bleu », où « dB » est l’affaiblissement de parcours en dB et « rouge », « vert », « bleu » les composantes RVB correspondantes, de 0 à 255, pour la région indiquée. Ces paramètres peuvent être modifiés et/ou complétés pour les prochaines exécutions de <b>SPLAT!</b> ; 32 zones de contour au maximum peuvent être définies dans ce fichier.)</p>
+<p>Si l’affaiblissement de parcours est inférieur à 80 dB, la couleur rouge (RVB = 255, 0, 0) est attribuée à la région. S’il est supérieur ou égal à 80 dB mais inférieur à 90 dB, c’est l’orange foncé (255, 128, 0). L’orange (255, 165, 0) est attribué aux régions dont l’affaiblissement est supérieur ou égal à 90 dB mais inférieur à 100 dB, et ainsi de suite. Au-delà du contour d’affaiblissement de 230 dB, le relief est affiché en niveaux de gris. L’ajout de l’option <code>-sc</code> lisse les transitions entre les niveaux de contour quantifiés indiqués.</p>
+
+<h2 id="analyse-du-champ-electrique">Analyse du champ électrique</h2>
+<p>Si la puissance apparente rayonnée (PAR) de l’émetteur est indiquée dans son fichier .lrp, ou donnée en ligne de commande avec l’option <code>-erp</code>, ce sont des contours de champ électrique exprimés en décibels par rapport à un microvolt par mètre (dBµV/m) qui sont produits, et non des contours d’affaiblissement de parcours :</p>
+<pre>splat -t wnjt-dt -L 30.0 -erp 46000 -db 30 -o plot.ppm</pre>
+<p>Dans ce mode, l’option <code>-db</code> peut être utilisée comme précédemment pour limiter l’étendue du tracé des contours de champ. Lors du tracé des contours de champ électrique, l’argument donné est toutefois interprété en dBµV/m.</p>
+<p>Les fichiers de définition des couleurs de champ électrique de <b>SPLAT!</b> ont une structure très proche des fichiers .lcf utilisés pour tracer l’affaiblissement de parcours :</p>
+<pre>; SPLAT! Auto-generated Signal Color Definition ("wnjt-dt.scf") File
+;
+; Format for the parameters held in this file is as follows:
+;
+; dBuV/m: red, green, blue
+;
+; ...where "dBuV/m" is the signal strength (in dBuV/m) and
+; "red", "green", and "blue" are the corresponding RGB color
+; definitions ranging from 0 to 255 for the region specified.
+;
+; The following parameters may be edited and/or expanded
+; for future runs of SPLAT! A total of 32 contour regions
+; may be defined in this file.
+;
+;
+128: 255, 0, 0
+118: 255, 165, 0
+108: 255, 206, 0
+98: 255, 255, 0
+88: 184, 255, 0
+78: 0, 255, 0
+68: 0, 208, 0
+58: 0, 196, 196
+48: 0, 148, 255
+38: 80, 80, 255
+28: 0, 38, 255
+18: 142, 63, 255
+8: 140, 0, 128</pre>
+<p>Si le champ est supérieur ou égal à 128 dB par rapport à 1 microvolt par mètre (dBµV/m), la région est affichée en rouge (255, 0, 0). S’il est supérieur ou égal à 118 dBµV/m mais inférieur à 128 dBµV/m, elle est affichée en orange (255, 165, 0), et ainsi de suite. Le relief est affiché en niveaux de gris pour les régions dont le champ est inférieur à 8 dBµV/m.</p>
+<p>Les contours de champ de quelques services de radiodiffusion VHF et UHF courants aux États-Unis sont les suivants :</p>
+<pre>Télévision analogique
+------------------------------------------------------------
+Canaux 2-6 : Qualité « ville » (City Grade) : &gt;= 74 dBµV/m
+Grade A : &gt;= 68 dBµV/m
+Grade B : &gt;= 47 dBµV/m
+------------------------------------------------------------
+Canaux 7-13 : Qualité « ville » : &gt;= 77 dBµV/m
+Grade A : &gt;= 71 dBµV/m
+Grade B : &gt;= 56 dBµV/m
+------------------------------------------------------------
+Canaux 14-69 : Qualité « intérieur » : &gt;= 94 dBµV/m
+Qualité « ville » : &gt;= 80 dBµV/m
+Grade A : &gt;= 74 dBµV/m
+Grade B : &gt;= 64 dBµV/m
+Télévision numérique
+------------------------------------------------------------
+Canaux 2-6 : Qualité « ville » : &gt;= 35 dBµV/m
+Seuil de service : &gt;= 28 dBµV/m
+------------------------------------------------------------
+Canaux 7-13 : Qualité « ville » : &gt;= 43 dBµV/m
+Seuil de service : &gt;= 36 dBµV/m
+------------------------------------------------------------
+Canaux 14-69 : Qualité « ville » : &gt;= 48 dBµV/m
+Seuil de service : &gt;= 41 dBµV/m
+NOAA Weather Radio (162,400 - 162,550 MHz)
+------------------------------------------------------------
+Fiable : &gt;= 18 dBµV/m
+Non fiable : &lt; 18 dBµV/m
+Réception improbable : &lt; 0 dBµV/m
+Radiodiffusion FM (88,1 - 107,9 MHz)
+------------------------------------------------------------
+Contour de service analogique : 60 dBµV/m
+Contour de service numérique : 65 dBµV/m</pre>
+
+<h2 id="analyse-du-niveau-de-puissance-recue">Analyse du niveau de puissance reçue</h2>
+<p>Si la puissance apparente rayonnée (PAR) de l’émetteur est indiquée dans son fichier .lrp, ou donnée en ligne de commande avec l’option <code>-erp</code>, et que l’option <code>-dbm</code> est utilisée, ce sont des contours de puissance reçue exprimés en décibels par rapport à un milliwatt (dBm) qui sont produits :</p>
+<pre>splat -t wnjt-dt -L 30.0 -erp 46000 -dbm -db -100 -o plot.ppm</pre>
+<p>L’option <code>-db</code> permet de limiter l’étendue du tracé des contours de puissance reçue. Lors du tracé de ces contours, l’argument donné est interprété en dBm.</p>
+<p>Les fichiers de définition des couleurs de puissance reçue de <b>SPLAT!</b> ont une structure très proche des fichiers décrits plus haut, à ceci près que les niveaux de puissance en dBm peuvent être positifs ou négatifs, et sont limités à une plage allant de +40 dBm à −200 dBm :</p>
+<pre>; SPLAT! Auto-generated DBM Signal Level Color Definition ("wnjt-dt.dcf") File
+;
+; Format for the parameters held in this file is as follows:
+;
+; dBm: red, green, blue
+;
+; ...where "dBm" is the received signal power level between +40 dBm
+; and -200 dBm, and "red", "green", and "blue" are the corresponding
+; RGB color definitions ranging from 0 to 255 for the region specified.
+;
+; The following parameters may be edited and/or expanded
+; for future runs of SPLAT! A total of 32 contour regions
+; may be defined in this file.
+;
+;
++0: 255, 0, 0
+-10: 255, 128, 0
+-20: 255, 165, 0
+-30: 255, 206, 0
+-40: 255, 255, 0
+-50: 184, 255, 0
+-60: 0, 255, 0
+-70: 0, 208, 0
+-80: 0, 196, 196
+-90: 0, 148, 255
+-100: 80, 80, 255
+-110: 0, 38, 255
+-120: 142, 63, 255
+-130: 196, 54, 255
+-140: 255, 0, 255
+-150: 255, 194, 204</pre>
+
+<h2 id="parametres-de-diagramme-de-rayonnement-dantenne">Paramètres de diagramme de rayonnement d’antenne</h2>
+<p>Les diagrammes normalisés de tension de champ des plans horizontal et vertical d’une antenne d’émission sont importés automatiquement dans <b>SPLAT!</b> lors d’une analyse de couverture d’affaiblissement de parcours, de champ électrique ou de puissance reçue. Les données de diagramme d’antenne sont lues dans une paire de fichiers portant le même nom de base que les fichiers de l’émetteur et LRP, mais avec les extensions .az et .el, respectivement pour les diagrammes en azimut et en élévation. Les fichiers de diagramme d’antenne de <b>SPLAT!</b> contiennent également les indications de rotation du diagramme (le cas échéant) ainsi que l’inclinaison mécanique du faisceau et sa direction (le cas échéant).</p>
+<p>Par exemple, les premières lignes d’un fichier de diagramme en azimut de <b>SPLAT!</b> pourraient se présenter ainsi (kvea.az) :</p>
+<pre>183.0
+0 0.8950590
+1 0.8966406
+2 0.8981447
+3 0.8995795
+4 0.9009535
+5 0.9022749
+6 0.9035517
+7 0.9047923
+8 0.9060051</pre>
+<p>La première ligne du fichier .az indique la rotation du diagramme en azimut (mesurée dans le sens horaire, en degrés, à partir du nord géographique) que <b>SPLAT!</b> doit appliquer aux données du fichier .az. Viennent ensuite les azimuts (de 0 à 360 degrés) et les valeurs normalisées du diagramme de champ correspondantes (de 0,000 à 1,000), séparés par des espaces.</p>
+<p>La structure des fichiers de diagramme en élévation de <b>SPLAT!</b> est légèrement différente. La première ligne du fichier .el indique l’inclinaison mécanique du faisceau appliquée à l’antenne. Notez qu’une inclinaison vers le bas (sous l’horizon) s’exprime par un angle positif, et une inclinaison vers le haut (au-dessus de l’horizon) par un angle négatif. Cette valeur est suivie, après un espace, de la direction en azimut de l’inclinaison.</p>
+<p>Le reste du fichier se compose d’angles d’élévation et des valeurs normalisées correspondantes du diagramme de rayonnement en tension (de 0,000 à 1,000), séparés par des espaces. Les angles d’élévation doivent couvrir la plage de −10,0 à +90,0 degrés. Comme pour l’inclinaison mécanique, les angles d’élévation négatifs représentent des élévations au-dessus de l’horizon, et les angles positifs des élévations sous l’horizon.</p>
+<p>Par exemple, les premières lignes d’un fichier de diagramme en élévation de <b>SPLAT!</b> pourraient se présenter ainsi (kvea.el) :</p>
+<pre>1.1 130.0
+-10.0 0.172
+-9.5 0.109
+-9.0 0.115
+-8.5 0.155
+-8.0 0.157
+-7.5 0.104
+-7.0 0.029
+-6.5 0.109
+-6.0 0.185</pre>
+<p>Dans cet exemple, l’antenne est inclinée mécaniquement de 1,1 degré vers le bas en direction de l’azimut 130,0 degrés.</p>
+<p>Pour de meilleurs résultats, la résolution des données de diagramme en azimut doit être d’un degré d’azimut, et celle des données de diagramme en élévation de 0,01 degré. Si les données fournies n’atteignent pas cette résolution, <b>SPLAT!</b> interpole les valeurs fournies pour obtenir les données à la résolution requise, ce qui peut toutefois entraîner une perte de précision.</p>
+
+<h2 id="exportation-et-importation-de-donnees-de-contours-regionaux">Exportation et importation de données de contours régionaux</h2>
+<p>Une analyse de couverture régionale fondée sur une analyse de trajet ITM peut prendre beaucoup de temps, en particulier si elle est répétée pour étudier l’effet de modifications du diagramme de rayonnement de l’antenne d’émission sur la zone de couverture prévue. On peut accélérer ce processus en exportant les données de contours produites par <b>SPLAT!</b> vers un fichier de sortie alphanumérique (.ano). Les données de ce fichier peuvent alors être modifiées pour intégrer les effets du diagramme d’antenne, puis réimportées dans <b>SPLAT!</b> pour produire rapidement une carte de contours révisée. Selon la façon dont <b>SPLAT!</b> est lancé, les fichiers de sortie alphanumériques peuvent décrire l’affaiblissement de parcours régional, le champ électrique ou les niveaux de puissance reçue.</p>
+<p>Par exemple, <b>SPLAT!</b> peut générer un fichier de sortie alphanumérique contenant l’affaiblissement de parcours pour un site de réception à 30 pieds au-dessus du sol, dans un rayon de 50 miles autour d’un site émetteur, jusqu’à un affaiblissement maximal de 140 dB (en supposant que la PAR n’est pas indiquée dans le fichier .lrp de l’émetteur), avec la syntaxe suivante :</p>
+<pre>splat -t kvea -L 30.0 -R 50.0 -db 140 -ano pathloss.dat</pre>
+<p>Si la PAR est indiquée dans le fichier .lrp ou en ligne de commande avec l’option <code>-erp</code>, le fichier de sortie alphanumérique contiendra plutôt les valeurs de champ prévues en dBµV/m. Si l’option <code>-dBm</code> est utilisée, il contiendra les niveaux de puissance reçue en dBm. Les fichiers de sortie alphanumériques de <b>SPLAT!</b> peuvent dépasser plusieurs centaines de mégaoctets. Ils contiennent des informations sur les limites de la région décrite, suivies des latitudes (degrés Nord), des longitudes (degrés Ouest), des azimuts (rapportés au nord géographique), des angles d’élévation (vers le premier obstacle), puis soit de l’affaiblissement de parcours (en dB), soit du champ reçu (en dBµV/m), soit du niveau de puissance reçue (en dBm), sans tenir compte du diagramme de rayonnement de l’antenne d’émission.</p>
+<p>Les premières lignes d’un fichier de sortie alphanumérique de <b>SPLAT!</b> pourraient se présenter ainsi (pathloss.dat) :</p>
+<pre>119, 117 ; max_west, min_west
+35, 34 ; max_north, min_north
+34.2265424, 118.0631096, 48.199, -32.747, 67.70
+34.2270358, 118.0624421, 48.199, -19.161, 73.72
+34.2275292, 118.0617747, 48.199, -13.714, 77.24
+34.2280226, 118.0611072, 48.199, -10.508, 79.74
+34.2290094, 118.0597723, 48.199, -11.806, 83.26 *
+34.2295028, 118.0591048, 48.199, -11.806, 135.47 *
+34.2299962, 118.0584373, 48.199, -15.358, 137.06 *
+34.2304896, 118.0577698, 48.199, -15.358, 149.87 *
+34.2314763, 118.0564348, 48.199, -15.358, 154.16 *
+34.2319697, 118.0557673, 48.199, -11.806, 153.42 *
+34.2324631, 118.0550997, 48.199, -11.806, 137.63 *
+34.2329564, 118.0544322, 48.199, -11.806, 139.23 *
+34.2339432, 118.0530971, 48.199, -11.806, 139.75 *
+34.2344365, 118.0524295, 48.199, -11.806, 151.01 *
+34.2349299, 118.0517620, 48.199, -11.806, 147.71 *
+34.2354232, 118.0510944, 48.199, -15.358, 159.49 *
+34.2364099, 118.0497592, 48.199, -15.358, 151.67 *</pre>
+<p>Des commentaires peuvent être insérés dans le fichier s’ils sont précédés d’un point-virgule. L’éditeur de texte vim s’est montré capable de modifier des fichiers de cette taille.</p>
+<p>Notez que, comme dans les fichiers de diagramme d’antenne, les angles d’élévation négatifs désignent une inclinaison vers le haut (audessus de l’horizon), et les angles positifs une inclinaison vers le bas (sous l’horizon). Ces angles correspondent à l’élévation vers l’antenne de réception, à la hauteur au-dessus du sol indiquée avec l’option <code>-L</code>, si le trajet entre l’émetteur et le récepteur est dégagé. Si le trajet est obstrué, un astérisque (*) est placé en fin de ligne, et l’angle d’élévation renvoyé par <b>SPLAT!</b> est celui du premier obstacle plutôt que celui du point géographique indiqué sur la ligne. Cela s’explique par le fait que le modèle ITM considère que l’énergie atteignant un point éloigné par un trajet obstrué résulte de l’énergie diffusée au sommet du premier obstacle rencontré sur le trajet. L’énergie ne pouvant atteindre directement le point obstrué, l’angle d’élévation réel vers la destination sur un tel trajet n’a plus d’importance.</p>
+<p>Lorsqu’on modifie les fichiers d’affaiblissement de parcours de <b>SPLAT!</b> pour y intégrer les données de diagramme d’antenne, seule la dernière colonne numérique doit être modifiée afin de refléter le gain normalisé de l’antenne aux angles d’azimut et d’élévation indiqués dans le fichier. Les programmes et scripts capables d’effectuer cette tâche sont laissés à titre d’exercice à l’utilisateur.</p>
+<p>Les fichiers de sortie alphanumériques modifiés peuvent être réimportés dans <b>SPLAT!</b> pour générer des cartes de couverture révisées, à condition que les options de PAR et <code>-dBm</code> soient utilisées comme lors de la génération initiale du fichier :</p>
+<pre>splat -t kvea -ani pathloss.dat -s city.dat -b county.dat -o map.ppm</pre>
+<p>Notez que les fichiers de sortie alphanumériques générés par splat ne peuvent pas être utilisés avec splat-hd, et inversement, en raison de l’incompatibilité de résolution entre les deux versions du programme. De plus, les trois types de fichiers de sortie alphanumériques sont incompatibles entre eux : un fichier contenant des données d’affaiblissement de parcours ne peut pas être importé dans <b>SPLAT!</b> pour produire des contours de champ électrique ou de puissance reçue, etc.</p>
+
+<h2 id="fichiers-de-relief-definis-par-lutilisateur">Fichiers de relief définis par l’utilisateur</h2>
+<p>Un fichier de relief défini par l’utilisateur est un fichier texte créé par l’utilisateur, contenant les latitudes, longitudes et hauteurs audessus du sol d’éléments de relief particuliers jugés importants pour l’analyse <b>SPLAT!</b> en cours, mais manifestement absents des fichiers SDF utilisés. Un fichier de relief défini par l’utilisateur est importé dans une analyse <b>SPLAT!</b> avec l’option <code>-udt</code> :</p>
+<pre>splat -t tx_site -r rx_site -udt udt_file.txt -o map.ppm</pre>
+<p>Un fichier de relief défini par l’utilisateur a l’aspect et la structure suivants :</p>
+<pre>40.32180556, 74.1325, 100.0 meters
+40.321805, 74.1315, 300.0
+40.3218055, 74.1305, 100.0 meters</pre>
+<p>La hauteur du relief est interprétée en pieds au-dessus du sol, sauf si elle est suivie du mot meters, et elle s’ajoute au relief défini par les données SDF aux emplacements indiqués. Sachez que chaque élément de relief défini par l’utilisateur est considéré comme mesurant 3 secondes d’arc en latitude et en longitude dans splat, et 1 seconde d’arc en latitude et en longitude dans splat-hd. Les éléments du fichier qui chevauchent des éléments déjà définis plus haut dans ce même fichier sont ignorés par <b>SPLAT!</b> afin d’éviter toute ambiguïté.</p>
+
+<h2 id="sursol">Sursol</h2>
+<p>La hauteur du sursol (végétation, bâti) peut être indiquée avec l’option <code>-gc</code> :</p>
+<pre>splat -t wnjt-dt -r kd2bd -gc 30.0 -H wnjt-dt_path.png</pre>
+<p>L’option <code>-gc</code> a pour effet de rehausser l’ensemble du relief de la valeur indiquée en pieds (ou en mètres si l’option <code>-metric</code> est utilisée), sauf sur les zones au niveau de la mer et aux emplacements des antennes d’émission et de réception.</p>
+
+<h2 id="generation-dune-carte-topographique-simple">Génération d’une carte topographique simple</h2>
+<p>Dans certains cas, il peut être utile de générer une carte topographique d’une région sans tracer de zones de couverture ni de trajets en visibilité directe, et sans produire de rapports d’obstacles. Il existe plusieurs façons de procéder. Pour générer une carte topographique montrant la position d’un site émetteur et d’un site récepteur, accompagnée d’un bref rapport texte décrivant les positions et les distances entre les sites, on utilise l’option <code>-n</code> comme suit :</p>
+<pre>splat -t tx_site -r rx_site -n -o topo_map.ppm</pre>
+<p>Si aucun rapport texte n’est souhaité, on utilise l’option <code>-N</code> :</p>
+<pre>splat -t tx_site -r rx_site -N -o topo_map.ppm</pre>
+<p>Pour obtenir plutôt une carte topographique centrée sur un site unique, s’étendant au moins jusqu’à un rayon donné, on peut utiliser une commande semblable à la suivante :</p>
+<pre>splat -t tx_site -R 50.0 -s NJ_Cities -b NJ_Counties -o topo_map.ppm</pre>
+<p>où <code>-R</code> indique le rayon minimal de la carte en miles (ou en kilomètres si l’option <code>-metric</code> est utilisée). Notez que le nom et la position de tx_site ne sont pas affichés dans cet exemple. Pour les afficher, il suffit de créer un fichier de villes <b>SPLAT!</b> (option <code>-s</code>) et de l’ajouter aux options de ligne de commande ci-dessus.</p>
+<p>Si l’option <code>-o</code> et le nom du fichier de sortie sont omis dans ces opérations, la sortie topographique est écrite par défaut dans un fichier nommé tx_site.ppm dans le répertoire de travail courant.</p>
+
+<h2 id="generation-dun-fichier-de-georeferencement">Génération d’un fichier de géoréférencement</h2>
+<p>Les cartes topographiques, de couverture (<code>-c</code>) et de contours d’affaiblissement de parcours (<code>-L</code>) générées par <b>SPLAT!</b> peuvent être importées dans le logiciel Xastir (X Amateur Station Tracking and Information Reporting) en générant un fichier de géoréférencement avec l’option <code>-geo</code> de <b>SPLAT!</b> :</p>
+<pre>splat -t kd2bd -R 50.0 -s NJ_Cities -b NJ_Counties -geo -o map.ppm</pre>
+<p>Le fichier de géoréférencement généré porte le même nom de base que le fichier indiqué avec <code>-o</code>, avec l’extension .geo, et permet à Xastir d’interpréter et d’afficher correctement les images .ppm de <b>SPLAT!</b>.</p>
+
+<h2 id="generation-de-fichiers-kml-pour-google">Génération de fichiers KML pour Google</h2>
+<p><b>SPLAT!</b> peut générer des fichiers Keyhole Markup Language compatibles avec Google Earth lors des analyses point à point ou de couverture régionale, en utilisant l’option <code>-kml</code> :</p>
+<pre>splat -t wnjt-dt -r kd2bd -kml</pre>
+<p>Le fichier KML généré a la même structure de nom qu’un rapport d’analyse de trajet pour les sites émetteur et récepteur indiqués, mais porte l’extension .kml.</p>
+<p>Une fois chargé dans Google Earth (Fichier --&gt; Ouvrir), le fichier KML annote la carte avec les noms des sites émetteur et récepteur. La vue est prise depuis la position du site émetteur, en direction du récepteur. Le trajet point à point entre les sites est affiché par une ligne blanche, et le trajet RF en visibilité directe en vert. Les outils de navigation de Google Earth permettent à l’utilisateur de « survoler » le trajet et d’identifier repères, routes et autres éléments.</p>
+<p>Lors d’une analyse de couverture régionale, le fichier .kml généré par <b>SPLAT!</b> permet de superposer les contours d’affaiblissement de parcours ou de champ électrique à l’affichage de Google Earth, avec la légende des couleurs correspondante dans le coin supérieur gauche. Le fichier .kml généré porte le même nom de base que le fichier .ppm habituellement produit.</p>
+
+<h2 id="determination-de-la-hauteur-dantenne-au-dessus-du-terrain-moyen">Détermination de la hauteur d’antenne au-dessus du terrain moyen</h2>
+<p><b>SPLAT!</b> détermine la hauteur d’antenne au-dessus du terrain moyen (HAAT) selon la procédure définie par la section 73.313(d) des règles de la Federal Communications Commission (FCC). Selon cette définition, les altitudes du terrain sont échantillonnées le long de huit radiales, entre 2 et 10 miles (3 et 16 kilomètres) du site analysé, et moyennées tous les 45 degrés d’azimut à partir du nord géographique. Si une ou plusieurs radiales se trouvent entièrement au-dessus de l’eau ou au-dessus de terres situées hors des ÉtatsUnis (zones pour lesquelles aucune donnée topographique USGS n’est disponible), ces radiales sont exclues du calcul du terrain moyen.</p>
+<p>Notez que les données d’élévation SRTM-3, contrairement aux anciennes données USGS, s’étendent au-delà des frontières des ÉtatsUnis. Les résultats de HAAT peuvent donc ne pas être entièrement conformes à la section 73.313(d) des règles de la FCC dans les zones frontalières des États-Unis si les fichiers SDF utilisés par <b>SPLAT!</b> sont issus des données SRTM.</p>
+<p>Lors d’une analyse de relief point à point, <b>SPLAT!</b> ne détermine la hauteur d’antenne au-dessus du terrain moyen que si le programme a déjà chargé suffisamment de données topographiques pour effectuer l’analyse point à point. C’est le cas la plupart du temps, sauf si le site considéré se trouve à moins de 10 miles de la limite des données topographiques en mémoire.</p>
+<p>Lors d’une analyse de prévision de zone, <b>SPLAT!</b> charge normalement suffisamment de données topographiques pour calculer le terrain moyen. Dans ces conditions, <b>SPLAT!</b> fournit la hauteur d’antenne au-dessus du terrain moyen ainsi que l’altitude du terrain moyen au-dessus du niveau moyen de la mer pour les azimuts 0, 45, 90, 135, 180, 225, 270 et 315 degrés, et inclut ces informations dans le rapport de site généré. Si une ou plusieurs des huit radiales étudiées se trouvent au-dessus de l’eau ou de régions pour lesquelles aucune donnée SDF n’est disponible, <b>SPLAT!</b> indique No Terrain (pas de relief) pour les radiales concernées.</p>
+
+<h2 id="informations-complementaires">Informations complémentaires</h2>
+<p>Les dernières nouvelles et informations concernant le logiciel <b>SPLAT!</b> sont disponibles sur la page web officielle de <b>SPLAT!</b> à l’adresse : <a href="http://www.qsl.net/kd2bd/splat.html">http://www.qsl.net/kd2bd/splat.html</a>.</p>
+
+<h2 id="auteurs">Auteurs</h2>
+<p>John A. Magliacane, KD2BD &lt;kd2bd@amsat.org&gt;</p>
+<pre>Créateur, développeur principal</pre>
+<p>Doug McDonald &lt;mcdonald@scs.uiuc.edu&gt;</p>
+<pre>Intégration initiale du modèle ITM Longley-Rice</pre>
+<p>Ron Bentley &lt;ronbentley@embarqmail.com&gt;</p>
+<pre>Tracé des zones de Fresnel et détermination du dégagement</pre>
+<p>Traduction française de la page de manuel <b>SPLAT!</b>(1) de KD2BD Software, version du 27 juin 2014. Les commandes, options, noms de fichiers, contenus de fichiers générés par le programme et messages du programme sont conservés tels quels.</p>
+</body>
+</html>
