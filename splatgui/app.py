@@ -26,10 +26,10 @@ from PyQt6.QtWidgets import (
 )
 
 from . import (
-    CREDITS, LICENSE_SHORT, SOURCE_URL, __version__, antenna_ui, antennas, basemap, cables, dem, help, hillshade, i18n, layers, layout, linkprofile, livemap, mappicker, prereqs,
+    CREDITS, LICENSE_SHORT, SOURCE_URL, __version__, antenna_ui, antennas, basemap, cables, dem, dted, help, hillshade, i18n, layers, layout, linkprofile, livemap, mappicker, prereqs,
     sites, splat, storage, terrain, themes,
 )
-from .widgets import FileList, ImageView, PathEdit, SliderValue, graduate
+from .widgets import FileList, HorizontalScroll, ImageView, PathEdit, SliderValue, graduate
 from .i18n import N_, tr
 
 QTH_FILTER = N_("Fichiers de site (*.qth);;Tous les fichiers (*)")
@@ -839,11 +839,13 @@ class MainWindow(QMainWindow):
         self.run_params = None
         self.run_spec = None
         self.terrain_worker = None
+        self.dted_worker = None
         self.terrain_retried = False
         self.site_tiles = []          # tuiles corrigées (sursol) écrites dans le dossier du calcul
         self.pending_result = (N_("terminé"), {})
         self._start_failed = False
         self._closing = False
+        self._level_lookup = (None, None)   # (carte, fonction couleur -> niveau de réception)
         self.splat_output = ""
         self._loading = False
 
@@ -868,6 +870,9 @@ class MainWindow(QMainWindow):
             self.restoreGeometry(QByteArray.fromBase64(geometry.encode()))
         else:
             self.resize(1500, 920)
+        # Séparateurs restaurés une fois la fenêtre affichée à sa taille définitive (avant, la
+        # répartition serait recalculée au redimensionnement).
+        QTimer.singleShot(0, self._restore_splitters)
 
         step(75, tr("Chargement du profil…"))
         self._reload_profile_combo()
@@ -1049,7 +1054,7 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def _build_central(self):
-        splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.main_splitter = splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._build_params_panel())
         splitter.addWidget(self._build_results_panel())
         # Paramètres : 1/3 de la largeur, résultats : 2/3.
@@ -1057,6 +1062,14 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(1, 2)
         splitter.setSizes([1000, 2000])
         self.setCentralWidget(splitter)
+
+    def _restore_splitters(self):
+        """Positions des séparateurs (paramètres | résultats, carte | couches) de la session précédente."""
+        states = self.settings.get("splitters_qt")
+        for name, state in (states.items() if isinstance(states, dict) else ()):
+            splitter = getattr(self, name, None)
+            if isinstance(splitter, QSplitter) and isinstance(state, str):
+                splitter.restoreState(QByteArray.fromBase64(state.encode()))
 
     def _build_params_panel(self):
         tabs = QTabWidget()
@@ -1645,9 +1658,21 @@ class MainWindow(QMainWindow):
         note.setWordWrap(True)
         note.setStyleSheet("color: gray;")
         relief.addWidget(note)
+        terrain_buttons = QHBoxLayout()
         open_terrain = QPushButton(tr("Ouvrir le dossier du relief"))
         open_terrain.clicked.connect(self._open_terrain_dir)
-        relief.addWidget(open_terrain, 0, Qt.AlignmentFlag.AlignLeft)
+        terrain_buttons.addWidget(open_terrain)
+        self.dted_button = QPushButton(tr("Convertir des fichiers DTED…"))
+        self.dted_button.setToolTip(tr(
+            "Convertit des tuiles DTED (.dt0, .dt1, .dt2) en fichiers SDF dans le dossier SDF "
+            "ci-dessus : SDF HD (1\") pour le .dt2, standard (3\") pour le .dt0 et le .dt1."))
+        dted_menu = QMenu(self.dted_button)
+        dted_menu.addAction(tr("Fichiers…"), self._convert_dted)
+        dted_menu.addAction(tr("Dossier entier (sous-dossiers compris)…"), lambda: self._convert_dted(folder=True))
+        self.dted_button.setMenu(dted_menu)
+        terrain_buttons.addWidget(self.dted_button)
+        terrain_buttons.addStretch()
+        relief.addLayout(terrain_buttons)
         layout.addWidget(relief_box)
 
         disk_box = QGroupBox(tr("Espace disque"))
@@ -1773,9 +1798,11 @@ class MainWindow(QMainWindow):
         self.image_view.zoomChanged.connect(self._update_image_info)
         self.image_view.contextRequested.connect(self._map_context_menu)
         il.addLayout(top)
-        il.addWidget(self._build_overlay_bar())
-        view_row = QHBoxLayout()
+        il.addWidget(HorizontalScroll(self._build_overlay_bar()))     # ne bloque pas la largeur du panneau
+        # Carte | panneau des couches : séparateur déplaçable (panneau repliable vers la droite).
+        self.map_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.live_map = livemap.LiveMap()
+        self.live_map.setMinimumSize(240, 200)      # 760 × 520 hérités du sélecteur de point : trop pour un panneau
         self.live_map.zoomChanged.connect(lambda _z: self._overlay_timer.start())
         self.live_map.homeRequested.connect(lambda: self._update_live_map(refit=True))
         self.live_map.statusText.connect(lambda text: self.overlay_status.setText(text))
@@ -1785,10 +1812,14 @@ class MainWindow(QMainWindow):
         self.view_stack = QStackedWidget()
         self.view_stack.addWidget(self.image_view)
         self.view_stack.addWidget(self.live_map)
-        view_row.addWidget(self.view_stack, 1)
-        view_row.addWidget(self._build_layers_panel())
+        self.map_splitter.addWidget(self.view_stack)
+        self.map_splitter.addWidget(self._build_layers_panel())
+        self.map_splitter.setStretchFactor(0, 1)
+        self.map_splitter.setStretchFactor(1, 0)
+        self.map_splitter.setCollapsible(0, False)
+        self.map_splitter.setSizes([2000, 270])
         self._display_mode_changed(refresh=False)
-        il.addLayout(view_row, 1)
+        il.addWidget(self.map_splitter, 1)
         bottom = QHBoxLayout()
         bottom.addWidget(self.image_info, 1)
         self.overlay_status = QLabel()
@@ -2300,7 +2331,7 @@ class MainWindow(QMainWindow):
     # ---- Exécution -------------------------------------------------------
 
     def _busy(self):
-        return self.process is not None or self.terrain_worker is not None
+        return self.process is not None or self.terrain_worker is not None or self.dted_worker is not None
 
     def run(self):
         if self._busy():
@@ -2446,6 +2477,8 @@ class MainWindow(QMainWindow):
     def stop(self):
         if self.terrain_worker is not None:
             self.terrain_worker.cancel()
+        if self.dted_worker is not None:
+            self.dted_worker.cancel()
         if self.process is not None:
             self.process.kill()
 
@@ -2816,6 +2849,7 @@ class MainWindow(QMainWindow):
             live.markers = [(site["lat"], site["lon"], sites.icon(name, 64) if name else None, site["name"])
                             for name, site in zip(names, self.current_sites)]
         relief_note = {"ign_estompage": tr("Relief : estompage IGN"), "srtm": tr("Relief : SRTM (NASA)")}.get(relief)
+        live.level_at = self._level_at
         live.set_vectors(self._live_vectors(), self.layer_opacity.value() / 100)
         live.legend_entries = self._legend_entries(coverage, None, relief_note, online=True)
         live.show_legend, live.show_scale = self.legend_check.isChecked(), self.scale_check.isChecked()
@@ -2823,6 +2857,24 @@ class MainWindow(QMainWindow):
         live.update()
         if relief == "srtm" and live.zoom < livemap.SRTM_MIN_ZOOM:
             self.overlay_status.setText(tr("Ombrage SRTM affiché à partir du zoom {zoom}", zoom=livemap.SRTM_MIN_ZOOM))
+
+    def _level_at(self, lat, lon):
+        """Niveau de réception au point (lat, lon), lu sur la carte SPLAT! affichée, ou None."""
+        image, ref, path = self.full_image, self.full_ref, self.image_combo.currentData()
+        if image is None or ref is None or not path:
+            return None
+        if self._level_lookup[0] != path:
+            tx_sites = [site for site in self.current_sites if site["role"] == "tx"]
+            self._level_lookup = (path, layout.level_lookup(Path(path).parent, tx_sites))
+        lookup = self._level_lookup[1]
+        if lookup is None:
+            return None
+        dx, dy = ref.pixel_size()
+        x, y = round((lon - ref.lon0) / dx), round((lat - ref.lat0) / dy)
+        if not (0 <= x < image.width() and 0 <= y < image.height()):
+            return None
+        color = image.pixelColor(x, y)
+        return lookup((color.red(), color.green(), color.blue()), lat, lon)
 
     def _live_vectors(self):
         """Calques GeoJSON cochés pour la carte en ligne (niveau de détail selon le zoom)."""
@@ -3093,7 +3145,7 @@ class MainWindow(QMainWindow):
     def _build_layers_panel(self):
         overlay = self.settings.setdefault("overlay", {})
         self.layers_panel = QWidget()
-        self.layers_panel.setFixedWidth(252)
+        self.layers_panel.setMinimumWidth(252)
         panel = QVBoxLayout(self.layers_panel)
         panel.setContentsMargins(0, 0, 0, 0)
 
@@ -3257,7 +3309,7 @@ class MainWindow(QMainWindow):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setFixedWidth(270)
+        scroll.setMinimumWidth(270)
         return scroll
 
     def _labeled_slider(self, layout, title, minimum, maximum, value, fmt, tick, page=None):
@@ -3775,6 +3827,64 @@ class MainWindow(QMainWindow):
         if search:
             self.help_window.focus_search()
 
+    def _convert_dted(self, folder=False):
+        """Convertit des tuiles DTED choisies par l'utilisateur (fichiers, ou tout un dossier
+        et ses sous-dossiers) en SDF, dans le dossier SDF (-d) indiqué, sinon terrain/sdf."""
+        if self._busy():
+            return
+        start = self.settings.get("dted_folder", "")
+        if folder:
+            chosen = QFileDialog.getExistingDirectory(self, tr("Convertir un dossier DTED"), start)
+            if not chosen:
+                return
+            files = dted.find_files([chosen])
+            if not files:
+                QMessageBox.information(self, tr("Convertir un dossier DTED"),
+                                        tr("Aucun fichier .dt0, .dt1 ou .dt2 dans {folder}.", folder=chosen))
+                return
+            self.settings["dted_folder"] = chosen
+        else:
+            files, _ = QFileDialog.getOpenFileNames(self, tr("Convertir des fichiers DTED"), start,
+                                                    tr("Tuiles DTED (*.dt0 *.dt1 *.dt2);;Tous les fichiers (*)"))
+            if not files:
+                return
+            self.settings["dted_folder"] = str(Path(files[0]).parent)
+        sdf_dir = Path(self.sdf_dir.text().strip() or terrain.SDF_DIR)
+        self._console_write(tr("Conversion DTED : {n} fichier(s) vers {folder}\n", n=len(files), folder=sdf_dir))
+        self.results_tabs.setCurrentWidget(self.console)
+        self.dted_worker = TerrainWorker(
+            lambda log, cancel, progress: dted.convert_files(files, sdf_dir, None, log, cancel, progress), self)
+        self.dted_worker.log.connect(self._console_write)
+        self.dted_worker.progress.connect(
+            lambda n, total: self._set_progress(n / total if total else None,
+                                                tr("Conversion DTED : {n}/{total}", n=n, total=total)))
+        self.dted_worker.done.connect(self._dted_done)
+        self.dted_button.setEnabled(False)
+        self.run_action.setEnabled(False)
+        self.stop_action.setEnabled(True)
+        self._set_progress(0.0, tr("Conversion DTED…"))
+        self.statusBar().showMessage(tr("Conversion DTED…"))
+        self.dted_worker.start()
+
+    def _dted_done(self, summary):
+        worker, self.dted_worker = self.dted_worker, None
+        worker.wait()
+        worker.deleteLater()
+        if self._closing:
+            return
+        self.dted_button.setEnabled(True)
+        self.stop_action.setEnabled(False)
+        self._refresh_state()
+        self._set_progress(0.0, "")
+        if summary is None:
+            message = tr("Conversion DTED interrompue.")
+        else:
+            message = tr("Conversion DTED : {ok} convertie(s), {failed} en échec.",
+                         ok=len(summary["converted"]), failed=len(summary["failed"]))
+        self._console_write(message + "\n\n")
+        self.statusBar().showMessage(message)
+        self._update_disk_usage()
+
     def _open_terrain_dir(self):
         params = self._params_or_warn()
         path = Path(splat.effective_sdf_dir(params)) if params else terrain.SDF_DIR
@@ -3804,6 +3914,17 @@ class MainWindow(QMainWindow):
                     QApplication.restoreOverrideCursor()
                 self.history = storage.update_history(str(self.run_dir), status=N_("interrompu"),
                                                       status_values={})
+            if self.dted_worker is not None:
+                # Arrêt entre deux tuiles : on attend que la tuile en cours soit écrite.
+                self._closing = True
+                worker = self.dted_worker
+                worker.cancel()
+                QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+                try:
+                    while not worker.wait(100):
+                        QApplication.processEvents()
+                finally:
+                    QApplication.restoreOverrideCursor()
             if self.process is not None:
                 self.process.kill()
                 self.process.waitForFinished(3000)
@@ -3819,6 +3940,8 @@ class MainWindow(QMainWindow):
         self.settings["last_profile"] = self.profile_name
         self._overlay_settings_changed()
         self.settings["geometry_qt"] = bytes(self.saveGeometry().toBase64()).decode()
+        self.settings["splitters_qt"] = {name: bytes(getattr(self, name).saveState().toBase64()).decode()
+                                         for name in ("main_splitter", "map_splitter")}
         storage.save_settings(self.settings)
         event.accept()
 

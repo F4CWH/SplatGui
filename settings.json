@@ -9,8 +9,8 @@
     "tx_sites": [
       {
         "name": "TX1",
-        "lat": 0,
-        "lon": 0,
+        "lat": 0.0,
+        "lon": 0.0,
         "height": 10.0,
         "height_unit": "m",
         "antenna": "",
@@ -138,5 +138,9 @@
     "source": "osm",
     "zoom": 2
   },
-  "prereqs_offered": true
+  "prereqs_offered": true,
+  "splitters_qt": {
+    "main_splitter": "AAAA/wAAAAEAAAACAAAD6AAAB9AB/////wEAAAABAA==",
+    "map_splitter": "AAAA/wAAAAEAAAACAAAH0AAAAQ4B/////wEAAAABAA=="
+  }
 }
