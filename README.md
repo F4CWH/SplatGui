@@ -2,9 +2,13 @@
 
 Interface graphique Windows pour **[SPLAT!](https://www.qsl.net/kd2bd/splat.html)** (*Signal Propagation, Loss, And Terrain*), l'outil d'analyse de propagation radio et de relief de John A. Magliacane, KD2BD, pour les fréquences de 20 MHz à 20 GHz.
 
+NB: cette interface a été développée avec l'aide de l'IA "Claude".
+
 SPLAT!Gui prépare les fichiers d'entrée de SPLAT! (sites `.qth`, paramètres ITM `.lrp`, diagrammes d'antenne `.az` / `.el`). Il télécharge et convertit le relief SRTM, lance le calcul, puis affiche les rapports et les cartes de couverture, y compris sur un fond OpenStreetMap ou IGN.
 
 Code source : <https://github.com/F4CWH/SplatGui>
+
+![Capture d'écran SPLAT!Gui](capture_splatgui.png)
 
 ## Fonctionnalités
 
