@@ -72,6 +72,23 @@ def read_color_file(path):
 
 def _pathloss_scale(run_dir, args):
     """(titre, [(texte, couleur)]) pour une carte -L, d'après le fichier de couleurs utilisé."""
+    levels = _pathloss_levels(run_dir, args)
+    if levels is None:
+        return None
+    kind, title, unit, entries = levels
+    rows = []
+    for i, (value, color) in enumerate(entries):
+        if kind == ".lcf":
+            text = f"< {value:g} {unit}" if i == 0 else f"{entries[i - 1][0]:g} – {value:g} {unit}"
+        else:
+            text = f"≥ {value:g} {unit}"
+        rows.append((text, color))
+    return title, rows
+
+
+def _pathloss_levels(run_dir, args):
+    """(extension, titre, unité, [(valeur, couleur)]) du fichier de couleurs d'une carte -L
+    (.dcf : dBm avec -dbm, .scf : champ avec une PAR, sinon .lcf : perte), ou None."""
     run_dir = Path(run_dir)
     tx = next(iter(sorted(run_dir.glob("tx1_*.qth"))), None)
     if tx is None:
@@ -97,14 +114,97 @@ def _pathloss_scale(run_dir, args):
     if not path.exists():
         return None
     entries = read_color_file(path)
-    rows = []
-    for i, (value, color) in enumerate(entries):
-        if kind == ".lcf":
-            text = f"< {value:g} {unit}" if i == 0 else f"{entries[i - 1][0]:g} – {value:g} {unit}"
-        else:
-            text = f"≥ {value:g} {unit}"
-        rows.append((text, color))
-    return title, rows
+    return (kind, title, unit, entries) if entries else None
+
+
+def _is_relief(rgb):
+    """Pixel de relief (gris) ou de mer de la carte SPLAT! : aucune couverture tracée."""
+    r, g, b = rgb
+    return r == g == b or rgb == (0, 0, 170)
+
+
+def _distance_km(lat1, lon1, lat2, lon2):
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    a = math.sin((p2 - p1) / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(math.radians(lon2 - lon1) / 2) ** 2
+    return 2 * 6371.0 * math.asin(math.sqrt(min(1.0, a)))
+
+
+def level_lookup(run_dir, tx_sites):
+    """Fonction (r, g, b, lat, lon) -> texte du niveau de réception représenté par un pixel de
+    la carte SPLAT! du dossier `run_dir`, ou None (point à point, couleur non reconnue).
+    -L : couleur du fichier .dcf / .scf / .lcf (avec -sc, couleurs interpolées entre deux
+    seuils : valeur interpolée) ; -c : émetteurs en visibilité. Au-delà de la portée -R de
+    tous les émetteurs, SPLAT! ne calcule rien : « hors de la zone calculée »."""
+    args = run_arguments(run_dir)
+    mode = run_mode(args)
+    tx_names = [site["name"] for site in tx_sites]
+    try:
+        range_km = float(_arg_value(args, "-R")) * (1.0 if "-metric" in args else 1.609344)
+    except (TypeError, ValueError):
+        range_km = None
+    lookup = _level_function(run_dir, args, mode, tx_names)
+    if lookup is None:
+        return None
+
+    def level(rgb, lat, lon):
+        if range_km and tx_sites and min(_distance_km(lat, lon, float(s["lat"]), float(s["lon"]))
+                                         for s in tx_sites) > range_km:
+            return tr("hors de la zone calculée")
+        return lookup(rgb)
+    return level
+
+
+def _level_function(run_dir, args, mode, tx_names):
+    """Fonction (r, g, b) -> texte du niveau, selon le mode de la carte, ou None."""
+    if mode == "coverage":
+        colors = {color: combo for combo, color in COVERAGE_COLORS if max(combo) <= len(tx_names)}
+
+        def coverage(rgb):
+            combo = colors.get(rgb)
+            if combo:
+                return tr("en visibilité de {sites}", sites=" + ".join(tx_names[i - 1] for i in combo))
+            return tr("hors visibilité") if _is_relief(rgb) else None
+        return coverage
+    if mode != "pathloss":
+        return None
+    levels = _pathloss_levels(run_dir, args)
+    if levels is None:
+        return None
+    kind, title, unit, entries = levels
+    # Seuils du meilleur au moins bon : puissance / champ décroissants, perte croissante.
+    entries = sorted(entries, key=lambda e: e[0], reverse=kind != ".lcf")
+    exact = {color: i for i, (_value, color) in reversed(list(enumerate(entries)))}
+    worst = entries[-1][0]
+    smooth = "-sc" in args
+    colors = np.array([color for _value, color in entries], dtype=float)
+
+    def describe(i):
+        # SPLAT! donne la couleur du seuil i aux points entre ce seuil et le précédent (meilleur).
+        value = entries[i][0]
+        if i == 0:
+            return f"{'<' if kind == '.lcf' else '≥'} {value:g} {unit}"
+        low, high = sorted((value, entries[i - 1][0]))
+        return f"{low:g} … {high:g} {unit}"
+
+    def pathloss(rgb):
+        if rgb in exact:
+            return tr("{title} : {level}", title=title, level=describe(exact[rgb]))
+        if _is_relief(rgb):
+            return tr("{title} : {level}", title=title, level=f"{'>' if kind == '.lcf' else '<'} {worst:g} {unit}")
+        if smooth and len(entries) > 1:
+            # Couleur intermédiaire : point le plus proche sur les segments entre seuils voisins.
+            point = np.array(rgb, dtype=float)
+            start, end = colors[1:], colors[:-1]
+            segment = end - start
+            length2 = np.maximum((segment ** 2).sum(axis=1), 1e-9)
+            t = np.clip(((point - start) * segment).sum(axis=1) / length2, 0, 1)
+            distance = np.linalg.norm(start + t[:, None] * segment - point, axis=1)
+            k = int(np.argmin(distance))
+            if distance[k] <= 12:
+                value = entries[k + 1][0] + t[k] * (entries[k][0] - entries[k + 1][0])
+                return tr("{title} : {level}", title=title, level=f"≈ {value:.0f} {unit}")
+        return None
+    return pathloss
 
 
 def _present_colors(coverage):

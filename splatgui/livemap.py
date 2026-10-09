@@ -108,6 +108,7 @@ class LiveMap(SlippyMap):
         self.srtm_url = ""            # modèle d'URL des tuiles SRTM (téléchargement à la volée)
         self.show_legend = True
         self.show_scale = True
+        self.level_at = None          # fonction (lat, lon) -> niveau de réception (texte) ou None
         self.hovered.connect(self._hover)
 
     # Réglages -------------------------------------------------------------------
@@ -318,7 +319,9 @@ class LiveMap(SlippyMap):
 
     def _hover(self, lat, lon):
         alt = hillshade.elevation_at(lat, lon)
-        self.hoveredText.emit(f"{lat:.5f}, {lon:.5f}" + (tr(" — sol {alt:.0f} m", alt=alt) if alt is not None else ""))
+        text = f"{lat:.5f}, {lon:.5f}" + (tr(" — sol {alt:.0f} m", alt=alt) if alt is not None else "")
+        level = self.level_at(lat, lon) if self.level_at else None
+        self.hoveredText.emit(text + (f" — {level}" if level else ""))
 
     # Tuiles d'ombrage SRTM (calculées) ------------------------------------------
 

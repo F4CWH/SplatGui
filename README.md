@@ -21,6 +21,7 @@ Code source : <https://github.com/F4CWH/SplatGui>
 - **Relief** :
   - téléchargement automatique des tuiles manquantes et conversion en SDF, puis relance de SPLAT! si des tuiles manquaient ;
   - trois sources au choix : SRTM, Copernicus GLO-30 (mondial, plus récent) ou IGN RGE ALTO (France, sol nu, complété par Copernicus hors de France) ;
+  - conversion de ses propres tuiles DTED (.dt0, .dt1, .dt2 ; fichiers ou dossier entier) en SDF standard ou HD ;
   - sursol facultatif (arbres, bâti, arbustes) d'après l'occupation du sol ESA WorldCover, retiré à l'emplacement des sites pour que les hauteurs d'antenne restent comptées depuis le sol.
 - **Profil de liaison** (point à point) : relief, courbure terrestre, ligne de visée, première zone de Fresnel et 60 %, dégagement et obstacles, tracés par l'application (valeurs au survol, export PNG).
 - **Cartes** :

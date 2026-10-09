@@ -2,11 +2,12 @@
 
 from pathlib import Path
 
-from PyQt6.QtCore import QEvent, QPoint, QPointF, Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, QPoint, QPointF, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QFontMetrics, QImage, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QFileDialog, QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, QHBoxLayout, QLabel,
-    QLineEdit, QListWidget, QPushButton, QSlider, QToolButton, QVBoxLayout, QWidget,
+    QLineEdit, QListWidget, QPushButton, QScrollArea, QSizePolicy, QSlider, QToolButton, QVBoxLayout,
+    QWidget,
 )
 from .i18n import N_, tr
 
@@ -35,6 +36,34 @@ class SliderValue(QLabel):
 
     def _show(self, value):
         self.setText(self._fmt.format(value / self._scale if self._scale != 1 else value))
+
+
+class HorizontalScroll(QScrollArea):
+    """Barre de commandes qui défile horizontalement quand la place manque, au lieu d'imposer sa
+    largeur au panneau qui la contient ; hauteur ajustée au contenu (+ barre de défilement)."""
+
+    def __init__(self, widget, parent=None):
+        super().__init__(parent)
+        self.setWidget(widget)
+        self.setWidgetResizable(True)
+        self.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._update_height()
+
+    def minimumSizeHint(self):
+        return QSize(120, super().minimumSizeHint().height())
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_height()
+
+    def _update_height(self):
+        content = self.widget()
+        needed = content.minimumSizeHint().width() > self.viewport().width()
+        height = content.sizeHint().height() + (self.horizontalScrollBar().sizeHint().height() if needed else 0)
+        if self.height() != height:
+            self.setFixedHeight(height)
 
 
 class ZoomControls(QWidget):
