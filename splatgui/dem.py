@@ -389,7 +389,7 @@ def write_sdf(path, grid, tile, hd):
     west_min = (-(lon + 1)) % 360
     ippd = nodes(hd) - 1
     values = np.rint(grid).astype(np.int32)[ippd:0:-1, ippd - 1::-1]     # sud → nord, est → ouest
-    header = f"{west_min + 1}\n{lat}\n{west_min}\n{lat + 1}\n"
+    header = f"{(west_min + 1) % 360}\n{lat}\n{west_min}\n{lat + 1}\n"     # E000 : 0, comme srtm2sdf
     partial = Path(str(path) + ".part")
     with open(partial, "w", encoding="ascii", newline="\n") as fh:
         fh.write(header)

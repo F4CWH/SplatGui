@@ -51,7 +51,7 @@ def _sdf_path(sdf_dir, tile, hd):
     path = terrain.sdf_file(sdf_dir, tile, hd)
     if path.exists():
         return path
-    other = Path(str(path).replace("_359_360", "_359_0"))
+    other = Path(str(path).replace("_359_0", "_359_360"))      # tuile E000 des versions ≤ 1.2.0
     return other if other.exists() else None
 
 
