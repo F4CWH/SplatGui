@@ -5,7 +5,7 @@
 ; l'application écrit ses données (réglages, résultats, relief, DLL…) à côté de l'exécutable.
 
 #ifndef AppVersion
-  #define AppVersion "1.2.0"
+  #define AppVersion "1.2.1"
 #endif
 #define AppName "SPLAT!Gui"
 #define AppExe "SPLAT!Gui.exe"
