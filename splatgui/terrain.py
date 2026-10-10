@@ -55,9 +55,10 @@ def tile_name(lat, lon):
 
 
 def region_name(lat, lon, hd=False):
-    """Nom SPLAT! de la région : lat_lat+1_ouestmin_ouestmax (degrés Ouest, 0-360)."""
+    """Nom SPLAT! de la région : lat_lat+1_ouestmin_ouestmax (degrés Ouest, 0-359). La tuile
+    E000 s'appelle « …_359_0 », nom que cherche SPLAT! et qu'écrit srtm2sdf."""
     west_min = (-(lon + 1)) % 360
-    return f"{lat}_{lat + 1}_{west_min}_{west_min + 1}" + ("-hd" if hd else "")
+    return f"{lat}_{lat + 1}_{west_min}_{(west_min + 1) % 360}" + ("-hd" if hd else "")
 
 
 def tile_from_region(min_lat, min_west):
@@ -73,8 +74,30 @@ def sdf_file(sdf_dir, tile, hd):
 
 def sdf_exists(sdf_dir, tile, hd):
     path = sdf_file(sdf_dir, tile, hd)
-    # Tuile E000 : « …_359_360 » ou « …_359_0 » selon la convention de l'outil.
-    return path.exists() or Path(str(path).replace("_359_360", "_359_0")).exists()
+    return path.exists() or migrate_e000(path)
+
+
+def migrate_e000(path):
+    """Les versions 1.2.0 et antérieures écrivaient la tuile E000 (Copernicus, IGN, DTED…) sous
+    le nom « …_359_360 » avec 360 en en-tête : SPLAT! ne la trouvait pas et supposait le niveau
+    de la mer. Renomme une telle tuile en « …_359_0 » (en-tête corrigé). Vrai si c'est fait."""
+    path = Path(path)
+    legacy = path.with_name(path.name.replace("_359_0", "_359_360"))
+    if legacy == path or not legacy.exists():
+        return False
+    partial = path.with_name(path.name + ".part")
+    try:
+        with open(legacy, "rb") as src, open(partial, "wb") as dst:
+            first = src.readline()
+            dst.write(b"0\n" if first.strip() == b"360" else first)
+            shutil.copyfileobj(src, dst, 1 << 20)
+        os.replace(partial, path)
+        legacy.unlink()
+        hd_alias(legacy).unlink(missing_ok=True)       # alias « 47:48:359:360-hd.sdf » de splat-hd
+    except OSError:
+        partial.unlink(missing_ok=True)
+        return False
+    return True
 
 
 # Le portage Windows de splat-hd.exe cherche « 48:49:357:358-hd.sdf » (le format standard a été
@@ -145,11 +168,13 @@ def tiles_for_params(params):
     if params["mode"] == "p2p":
         boxes = [(min(lats), max(lats), min(lons), max(lons))]
     else:
-        margin = _range_km(params) or 0.0
+        # Étendue chargée par SPLAT! (splat.cpp) : portée en miles / 57 degrés, élargie en
+        # longitude par 1 / cos(latitude), latitude limitée à 70°.
+        margin = (_range_km(params) or 0.0) / 1.609344 / 57.0
         boxes = []
         for lat, lon in zip(lats, lons):
-            dlat = margin / 111.0
-            dlon = margin / (111.0 * max(math.cos(math.radians(lat)), 0.05))
+            dlat = margin
+            dlon = margin / math.cos(math.radians(min(abs(lat), 70.0)))
             boxes.append((lat - dlat, lat + dlat, lon - dlon, lon + dlon))
     for lat_min, lat_max, lon_min, lon_max in boxes:
         for lat in range(math.floor(max(lat_min, -90)), math.floor(min(lat_max, 89.999)) + 1):
