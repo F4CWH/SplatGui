@@ -1698,6 +1698,12 @@ class MainWindow(QMainWindow):
         layout.addWidget(out_box)
 
         relief_box = QGroupBox(tr("Relief (fichiers SDF)"))
+        # Info-bulle de la rubrique ; <p> pour que le texte, long, revienne à la ligne
+        relief_box.setToolTip("<p>" + tr("Tuiles SRTM conservées dans terrain/srtm (on peut aussi y déposer "
+                                         "ses propres fichiers N48E002.hgt, .hgt.gz ou .zip). Les tuiles manquantes "
+                                         "sont détectées avant l'exécution (sites et portée -R) puis d'après les "
+                                         "messages de SPLAT!, qui est alors relancé une fois. Sans SDF, SPLAT! "
+                                         "suppose un terrain au niveau de la mer.") + "</p>")
         relief = QVBoxLayout(relief_box)
         self.auto_terrain = QCheckBox(tr("Télécharger et préparer le relief manquant"))
         self.auto_terrain.setToolTip(tr("Télécharge les tuiles de relief manquantes (source ci-dessous) "
@@ -1747,14 +1753,6 @@ class MainWindow(QMainWindow):
         self.sdf_dir.changed.connect(self.changed)
         sdf_row.addWidget(self.sdf_dir)
         relief.addLayout(sdf_row)
-        note = QLabel(tr("Tuiles SRTM conservées dans terrain/srtm (on peut aussi y déposer "
-                      "ses propres fichiers N48E002.hgt, .hgt.gz ou .zip). Les tuiles manquantes "
-                      "sont détectées avant l'exécution (sites et portée -R) puis d'après les "
-                      "messages de SPLAT!, qui est alors relancé une fois. Sans SDF, SPLAT! "
-                      "suppose un terrain au niveau de la mer."))
-        note.setWordWrap(True)
-        note.setStyleSheet("color: gray;")
-        relief.addWidget(note)
         terrain_buttons = QHBoxLayout()
         open_terrain = QPushButton(tr("Ouvrir le dossier du relief"))
         open_terrain.clicked.connect(self._open_terrain_dir)
