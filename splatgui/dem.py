@@ -76,44 +76,113 @@ class RemoteFile:
         return data
 
 
+class LocalFile:
+    """Fichier local lu par plages d'octets (même interface que RemoteFile)."""
+
+    def __init__(self, path):
+        self.path = Path(path)
+
+    def read(self, offset, length):
+        with open(self.path, "rb") as fh:
+            fh.seek(offset)
+            return fh.read(length)
+
+
+def lzw_decode(data):
+    """Décompression LZW des TIFF (codes de 9 à 12 bits, poids forts d'abord, « early change »)."""
+    out = bytearray()
+    table = [bytes([i]) for i in range(256)] + [b"", b""]
+    bits, width, prev = len(data) * 8, 9, None
+    data = bytes(data) + b"\0\0\0"
+    position = 0
+    while position + width <= bits:
+        chunk = int.from_bytes(data[position >> 3:(position >> 3) + 3], "big")
+        code = (chunk >> (24 - (position & 7) - width)) & ((1 << width) - 1)
+        position += width
+        if code == 256:                                   # remise à zéro de la table
+            del table[258:]
+            width, prev = 9, None
+            continue
+        if code == 257:                                   # fin des données
+            break
+        if prev is None:
+            entry = table[code]
+        else:
+            entry = table[code] if code < len(table) else prev + prev[:1]
+            table.append(prev + entry[:1])
+            if len(table) + 1 >= 1 << width and width < 12:
+                width += 1
+        out += entry
+        prev = entry
+    return bytes(out)
+
+
 _TYPES = {1: "B", 2: "B", 3: "H", 4: "I", 6: "b", 7: "B", 8: "h", 9: "i", 11: "f", 12: "d", 16: "Q", 17: "q"}
 _DTYPES = {(1, 8): np.uint8, (2, 8): np.int8, (1, 16): np.uint16, (2, 16): np.int16, (1, 32): np.uint32,
            (2, 32): np.int32, (3, 32): np.float32, (3, 64): np.float64}
 
 
 class CogLevel:
-    """Une image (pleine résolution ou aperçu) d'un GeoTIFF tuilé."""
+    """Une image (pleine résolution ou aperçu) d'un GeoTIFF, en tuiles ou en bandes de lignes
+    (une bande = une tuile de toute la largeur)."""
 
-    def __init__(self, tags):
+    def __init__(self, tags, byteorder="<"):
         self.width, self.height = tags[256][0], tags[257][0]
-        self.tile_w, self.tile_h = tags[322][0], tags[323][0]
-        self.offsets, self.counts = tags[324], tags[325]
+        if 322 in tags:
+            self.tile_w, self.tile_h = tags[322][0], tags[323][0]
+            self.offsets, self.counts = tags[324], tags[325]
+        else:
+            self.tile_w, self.tile_h = self.width, min(tags.get(278, (self.height,))[0], self.height)
+            self.offsets, self.counts = tags[273], tags[279]
+        if tags.get(277, (1,))[0] != 1:
+            raise ValueError(tr("GeoTIFF à plusieurs bandes non pris en charge (une seule bande d'altitude attendue)."))
         self.compression = tags.get(259, (1,))[0]
         self.predictor = tags.get(317, (1,))[0]
         bits = tags.get(258, (8,))[0]
-        self.dtype = np.dtype(_DTYPES[(tags.get(339, (1,))[0], bits)]).newbyteorder("<")
+        kind = (tags.get(339, (1,))[0], bits)
+        if kind not in _DTYPES:
+            raise ValueError(tr("Type de données TIFF non pris en charge ({bits} bits).", bits=bits))
+        self.dtype = np.dtype(_DTYPES[kind]).newbyteorder(byteorder)
         self.across = math.ceil(self.width / self.tile_w)
 
 
 class Cog:
-    """GeoTIFF tuilé (classique, petit-boutiste), avec ses aperçus. Géoréférencement : étendue
-    en degrés (ouest, nord, est, sud) de la pleine résolution, commune à tous les niveaux."""
+    """GeoTIFF (classique, petit- ou gros-boutiste, en tuiles ou en bandes), avec ses aperçus.
+    Géoréférencement : étendue (ouest, nord, est, sud) de la pleine résolution, commune à tous les
+    niveaux, dans les unités du système de coordonnées (degrés ou mètres) ; `geokeys` : clés
+    GeoTIFF {numéro: valeur} ; `nodata` : valeur sans données (GDAL), ou None."""
 
     def __init__(self, source):
         self.source = source
         head = source.read(0, 65536)
-        if head[:4] != b"II*\x00":
-            raise ValueError(tr("GeoTIFF non pris en charge (BigTIFF ou gros-boutiste)."))
+        if head[:4] == b"II*\x00":
+            self.byteorder = "<"
+        elif head[:4] == b"MM\x00*":
+            self.byteorder = ">"
+        else:
+            raise ValueError(tr("Fichier TIFF non pris en charge (BigTIFF ou format inconnu)."))
         self.levels = []
-        offset = struct.unpack("<I", head[4:8])[0]
+        offset = struct.unpack(self.byteorder + "I", head[4:8])[0]
         geo = None
         while offset:
             tags, offset = self._ifd(head, offset)
-            self.levels.append(CogLevel(tags))
+            if 256 not in tags or not (322 in tags or 273 in tags):
+                continue                                  # image sans pixels
             if geo is None:
                 geo = tags
+                self.levels.append(CogLevel(tags, self.byteorder))
+            elif tags.get(254, (0,))[0] & 1 and not tags.get(254, (0,))[0] & 4:
+                self.levels.append(CogLevel(tags, self.byteorder))     # aperçu (pas un masque)
+        if geo is None or 33550 not in geo or 33922 not in geo:
+            raise ValueError(tr("TIFF sans géoréférencement (GeoTIFF attendu)."))
         scale, tie = geo[33550], geo[33922]
         keys = geo.get(34735, ())
+        self.geokeys = {keys[i]: keys[i + 3] for i in range(4, len(keys) - 3, 4) if keys[i + 1] == 0}
+        text = bytes(geo.get(42113, ())).split(b"\0")[0].strip()
+        try:
+            self.nodata = float(text) if text else None
+        except ValueError:
+            self.nodata = None
         point = any(keys[i] == 1025 and keys[i + 3] == 2 for i in range(4, len(keys), 4))
         base = self.levels[0]
         # Coins de l'étendue : en « PixelIsPoint », le point de calage est le centre du pixel.
@@ -127,19 +196,20 @@ class Cog:
                 return head[position:position + size]
             return self.source.read(position, size)
 
-        count = struct.unpack("<H", fetch(offset, 2))[0]
+        bo = self.byteorder
+        count = struct.unpack(bo + "H", fetch(offset, 2))[0]
         entries = fetch(offset + 2, count * 12 + 4)
         tags = {}
         for n in range(count):
-            tag, kind, number, value = struct.unpack("<HHII", entries[n * 12:n * 12 + 12])
+            tag, kind, number, value = struct.unpack(bo + "HHII", entries[n * 12:n * 12 + 12])
             if kind not in _TYPES and kind != 5:
                 continue
             size = struct.calcsize("<" + _TYPES.get(kind, "II")) * number
             raw = entries[n * 12 + 8:n * 12 + 12] if size <= 4 else fetch(value, size)
             if kind == 5:                                 # rationnels : non utilisés
                 continue
-            tags[tag] = struct.unpack("<" + _TYPES[kind] * number, raw[:size])
-        return tags, struct.unpack("<I", entries[count * 12:count * 12 + 4])[0]
+            tags[tag] = struct.unpack(bo + _TYPES[kind] * number, raw[:size])
+        return tags, struct.unpack(bo + "I", entries[count * 12:count * 12 + 4])[0]
 
     def level_for(self, step_deg):
         """Le niveau le moins détaillé dont la maille reste inférieure ou égale à `step_deg`."""
@@ -155,8 +225,14 @@ class Cog:
         raw = self.source.read(level.offsets[index], count)
         if level.compression in (8, 32946):
             raw = zlib.decompress(raw)
+        elif level.compression == 5:
+            raw = lzw_decode(raw)
         elif level.compression != 1:
             raise ValueError(tr("Compression TIFF {n} non prise en charge.", n=level.compression))
+        size = th * tw * level.dtype.itemsize
+        if len(raw) < size:                               # dernière bande, plus courte
+            raw = bytes(raw) + bytes(size - len(raw))
+        raw = raw[:size]
         if level.predictor == 3:                          # prédicteur flottant (plans d'octets)
             planes = np.frombuffer(raw, np.uint8).reshape(th, level.dtype.itemsize * tw)
             planes = np.cumsum(planes, axis=1, dtype=np.uint8).reshape(th, level.dtype.itemsize, tw)

@@ -25,7 +25,10 @@ Code source : <https://github.com/F4CWH/SplatGui>
 - **Relief** :
   - téléchargement automatique des tuiles manquantes et conversion en SDF, puis relance de SPLAT! si des tuiles manquaient ;
   - trois sources au choix : SRTM, Copernicus GLO-30 (mondial, plus récent) ou IGN RGE ALTO (France, sol nu, complété par Copernicus hors de France) ;
-  - conversion de ses propres tuiles DTED (.dt0, .dt1, .dt2 ; fichiers ou dossier entier) en SDF standard ou HD ;
+  - import de ses propres modèles de terrain (fichiers ou dossier entier) en SDF standard ou HD :
+    - tuiles DTED (.dt0, .dt1, .dt2) ;
+    - GeoTIFF (.tif) et ESRI ASCII Grid (.asc), par exemple les dalles IGN RGE ALTO / BD ALTI, en lon/lat, Lambert 93, CC42 à CC50 ou UTM (reprojection intégrée, système lu dans le GeoTIFF ou le .prj) ; dalles assemblées en tuiles SDF, complétées hors des fichiers par le SDF existant ou Copernicus ;
+    - en ligne de commande : `tools/dt2sdf.py` (DTED) et `tools/dem2sdf.py` (GeoTIFF / ASCII Grid) ;
   - sursol facultatif (arbres, bâti, arbustes) d'après l'occupation du sol ESA WorldCover, retiré à l'emplacement des sites pour que les hauteurs d'antenne restent comptées depuis le sol.
 - **Profil de liaison** (liaison point à point) : relief, courbure terrestre, ligne de visée, première zone de Fresnel et 60 %, dégagement et obstacles, pylônes des antennes, tracés par l'application ; fiches de synthèse du rapport SPLAT! (valeurs au survol, export PNG).
 - **Panorama** : relief à 360° vu depuis un émetteur, à la hauteur de son antenne (courbure terrestre et facteur k) :

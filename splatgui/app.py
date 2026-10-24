@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
 )
 
 from . import (
-    CREDITS, LICENSE_SHORT, SOURCE_URL, __version__, antenna_ui, antennas, basemap, cables, dem, dted, googleearth, help, hillshade, i18n, layers, layout, linkprofile, livemap, mappicker, palettes, panorama, prereqs,
+    CREDITS, LICENSE_SHORT, SOURCE_URL, __version__, antenna_ui, antennas, basemap, cables, dem, demimport, dted, googleearth, help, hillshade, i18n, layers, layout, linkprofile, livemap, mappicker, palettes, panorama, prereqs,
     sites, splat, storage, terrain, themes,
 )
 from .widgets import FileList, HorizontalScroll, ImageView, PathEdit, SliderValue, graduate
@@ -1733,10 +1733,13 @@ class MainWindow(QMainWindow):
         open_terrain = QPushButton(tr("Ouvrir le dossier du relief"))
         open_terrain.clicked.connect(self._open_terrain_dir)
         terrain_buttons.addWidget(open_terrain)
-        self.dted_button = QPushButton(tr("Convertir des fichiers DTED…"))
+        self.dted_button = QPushButton(tr("Importer un relief (DTED, GeoTIFF, ASCII Grid)…"))
         self.dted_button.setToolTip(tr(
-            "Convertit des tuiles DTED (.dt0, .dt1, .dt2) en fichiers SDF dans le dossier SDF "
-            "ci-dessus : SDF HD (1\") pour le .dt2, standard (3\") pour le .dt0 et le .dt1."))
+            "Convertit ses propres fichiers de relief en SDF dans le dossier SDF ci-dessus.\n"
+            "DTED (.dt0, .dt1, .dt2) : SDF HD (1\") pour le .dt2, standard (3\") sinon.\n"
+            "GeoTIFF (.tif) et ESRI ASCII Grid (.asc) : SDF de la version de SPLAT! choisie "
+            "(standard ou HD) ; lon/lat, Lambert 93, CC42 à CC50 ou UTM ; dalles assemblées, "
+            "complétées hors des fichiers par le SDF existant ou Copernicus."))
         dted_menu = QMenu(self.dted_button)
         dted_menu.addAction(tr("Fichiers…"), self._convert_dted)
         dted_menu.addAction(tr("Dossier entier (sous-dossiers compris)…"), lambda: self._convert_dted(folder=True))
@@ -4285,42 +4288,61 @@ class MainWindow(QMainWindow):
             self.help_window.focus_search()
 
     def _convert_dted(self, folder=False):
-        """Convertit des tuiles DTED choisies par l'utilisateur (fichiers, ou tout un dossier
-        et ses sous-dossiers) en SDF, dans le dossier SDF (-d) indiqué, sinon terrain/sdf."""
+        """Importe des fichiers de relief choisis par l'utilisateur (fichiers, ou tout un dossier
+        et ses sous-dossiers) : DTED, GeoTIFF et ASCII Grid convertis en SDF, dans le dossier SDF
+        (-d) indiqué, sinon terrain/sdf."""
         if self._busy():
             return
         start = self.settings.get("dted_folder", "")
+        suffixes = dted.SUFFIXES + demimport.SUFFIXES
         if folder:
-            chosen = QFileDialog.getExistingDirectory(self, tr("Convertir un dossier DTED"), start)
+            chosen = QFileDialog.getExistingDirectory(self, tr("Importer un dossier de relief"), start)
             if not chosen:
                 return
-            files = dted.find_files([chosen])
+            files = sorted(p for p in Path(chosen).rglob("*") if p.suffix.lower() in suffixes)
             if not files:
-                QMessageBox.information(self, tr("Convertir un dossier DTED"),
-                                        tr("Aucun fichier .dt0, .dt1 ou .dt2 dans {folder}.", folder=chosen))
+                QMessageBox.information(self, tr("Importer un dossier de relief"),
+                                        tr("Aucun fichier .dt0, .dt1, .dt2, .tif ou .asc dans {folder}.", folder=chosen))
                 return
             self.settings["dted_folder"] = chosen
         else:
-            files, _ = QFileDialog.getOpenFileNames(self, tr("Convertir des fichiers DTED"), start,
-                                                    tr("Tuiles DTED (*.dt0 *.dt1 *.dt2);;Tous les fichiers (*)"))
+            files, _ = QFileDialog.getOpenFileNames(
+                self, tr("Importer des fichiers de relief"), start,
+                tr("Relief (*.dt0 *.dt1 *.dt2 *.tif *.tiff *.asc);;Tuiles DTED (*.dt0 *.dt1 *.dt2);;"
+                   "GeoTIFF (*.tif *.tiff);;ESRI ASCII Grid (*.asc);;Tous les fichiers (*)"))
             if not files:
                 return
             self.settings["dted_folder"] = str(Path(files[0]).parent)
+            files = [Path(p) for p in files]
+        dted_files = [p for p in files if p.suffix.lower() in dted.SUFFIXES]
+        grid_files = [p for p in files if p.suffix.lower() not in dted.SUFFIXES]
+        hd = self.variant_combo.currentData() == "hd"
         sdf_dir = Path(self.sdf_dir.text().strip() or terrain.SDF_DIR)
-        self._console_write(tr("Conversion DTED : {n} fichier(s) vers {folder}\n", n=len(files), folder=sdf_dir))
+        self._console_write(tr("Import du relief : {n} fichier(s) vers {folder}\n", n=len(files), folder=sdf_dir))
+        if grid_files:
+            self._console_write(tr("GeoTIFF / ASCII Grid : SDF {kind}\n", kind=tr("HD") if hd else tr("standard")))
         self.results_tabs.setCurrentWidget(self.console)
-        self.dted_worker = TerrainWorker(
-            lambda log, cancel, progress: dted.convert_files(files, sdf_dir, None, log, cancel, progress), self)
+
+        def work(log, cancel, progress):
+            summary = {"converted": [], "failed": []}
+            for part in (dted.convert_files(dted_files, sdf_dir, None, log, cancel, progress) if dted_files else None,
+                         demimport.import_files(grid_files, sdf_dir, hd, log, cancel, progress) if grid_files else None):
+                if part:
+                    summary["converted"] += part["converted"]
+                    summary["failed"] += part["failed"]
+            return summary
+
+        self.dted_worker = TerrainWorker(work, self)
         self.dted_worker.log.connect(self._console_write)
         self.dted_worker.progress.connect(
             lambda n, total: self._set_progress(n / total if total else None,
-                                                tr("Conversion DTED : {n}/{total}", n=n, total=total)))
+                                                tr("Import du relief : {n}/{total}", n=n, total=total)))
         self.dted_worker.done.connect(self._dted_done)
         self.dted_button.setEnabled(False)
         self.run_action.setEnabled(False)
         self.stop_action.setEnabled(True)
-        self._set_progress(0.0, tr("Conversion DTED…"))
-        self.statusBar().showMessage(tr("Conversion DTED…"))
+        self._set_progress(0.0, tr("Import du relief…"))
+        self.statusBar().showMessage(tr("Import du relief…"))
         self.dted_worker.start()
 
     def _dted_done(self, summary):
@@ -4333,10 +4355,13 @@ class MainWindow(QMainWindow):
         self.stop_action.setEnabled(False)
         self._refresh_state()
         self._set_progress(0.0, "")
+        linkprofile.read_sdf.cache_clear()                 # SDF réécrits : profil et panorama à jour
+        self.pano_cache.clear()
+        self.pano_shown = None
         if summary is None:
-            message = tr("Conversion DTED interrompue.")
+            message = tr("Import du relief interrompu.")
         else:
-            message = tr("Conversion DTED : {ok} convertie(s), {failed} en échec.",
+            message = tr("Import du relief : {ok} tuile(s) SDF écrite(s), {failed} fichier(s) en échec.",
                          ok=len(summary["converted"]), failed=len(summary["failed"]))
         self._console_write(message + "\n\n")
         self.statusBar().showMessage(message)
