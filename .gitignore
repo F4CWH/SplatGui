@@ -14,3 +14,8 @@
 *.dt0
 *.dt1
 *.dt2
+
+# Résultats de compilation (installeurs et versions portables publiés dans les releases GitHub)
+/build/
+/dist/
+/portable/
