@@ -864,7 +864,7 @@
  "grille tournée non prise en charge": "rotated grid not supported",
  "Type de données ENVI non pris en charge ({code}).": "Unsupported ENVI data type ({code}).",
  "géoréférencement absent (map info dans le .hdr)": "no georeferencing (map info in the .hdr)",
- "Importer un relief (DTED, GeoTIFF, ASCII Grid, Surfer, BIL, XYZ, SRTM)…": "Import terrain (DTED, GeoTIFF, ASCII Grid, Surfer, BIL, XYZ, SRTM)…",
+ "Importer un relief": "Import terrain",
  "Convertit ses propres fichiers de relief en SDF dans le dossier SDF ci-dessus.\nDTED (.dt0, .dt1, .dt2) : SDF HD (1\") pour le .dt2, standard (3\") sinon.\nGeoTIFF (.tif), ESRI ASCII Grid (.asc), Surfer (.grd), grilles binaires avec en-tête .hdr (BIL, BIP, BSQ, .flt, GTOPO30 .dem, ENVI .img), semis XYZ en grille (.xyz, .csv, .txt) et tuiles SRTM (N48E002.hgt, .hgt.gz, .zip) : SDF de la version de SPLAT! choisie (standard ou HD) ; lon/lat, Lambert 93, CC42 à CC50, UTM, LAEA Europe (EU-DEM), NTF Lambert I à IV (dont le II étendu), Lambert belge 72 / 2008 ou suisse LV03 / LV95 ; dalles assemblées, complétées hors des fichiers par le SDF existant ou Copernicus.": "Converts your own terrain files to SDF in the SDF folder above.\nDTED (.dt0, .dt1, .dt2): HD SDF (1\") for .dt2, standard (3\") otherwise.\nGeoTIFF (.tif), ESRI ASCII Grid (.asc), Surfer (.grd), binary grids with a .hdr header (BIL, BIP, BSQ, .flt, GTOPO30 .dem, ENVI .img), gridded XYZ points (.xyz, .csv, .txt) and SRTM tiles (N48E002.hgt, .hgt.gz, .zip): SDF for the selected SPLAT! version (standard or HD); lon/lat, Lambert 93, CC42 to CC50, UTM, LAEA Europe (EU-DEM), NTF Lambert I to IV (including extended II), Belgian Lambert 72 / 2008 or Swiss LV03 / LV95; tiles are merged and completed outside the files by the existing SDF or Copernicus.",
  "Relief (*.dt0 *.dt1 *.dt2 *.tif *.tiff *.asc *.grd *.bil *.bip *.bsq *.flt *.dem *.img *.xyz *.csv *.txt *.hgt *.hgt.gz *.zip);;Tuiles DTED (*.dt0 *.dt1 *.dt2);;GeoTIFF (*.tif *.tiff);;ESRI ASCII Grid (*.asc);;Surfer (*.grd);;Grilles binaires avec .hdr (*.bil *.bip *.bsq *.flt *.dem *.img);;Semis XYZ (*.xyz *.csv *.txt);;Tuiles SRTM (*.hgt *.hgt.gz *.zip);;Tous les fichiers (*)": "Terrain (*.dt0 *.dt1 *.dt2 *.tif *.tiff *.asc *.grd *.bil *.bip *.bsq *.flt *.dem *.img *.xyz *.csv *.txt *.hgt *.hgt.gz *.zip);;DTED tiles (*.dt0 *.dt1 *.dt2);;GeoTIFF (*.tif *.tiff);;ESRI ASCII Grid (*.asc);;Surfer (*.grd);;Binary grids with .hdr (*.bil *.bip *.bsq *.flt *.dem *.img);;XYZ points (*.xyz *.csv *.txt);;SRTM tiles (*.hgt *.hgt.gz *.zip);;All files (*)",
  "Aucun fichier de relief reconnu (DTED, GeoTIFF, ASCII Grid, Surfer, BIL, XYZ, SRTM) dans {folder}.": "No recognised terrain file (DTED, GeoTIFF, ASCII Grid, Surfer, BIL, XYZ, SRTM) in {folder}.",
@@ -890,10 +890,5 @@
  "Glisser ou ← → : tourner et lever les yeux · molette ou +/− : zoom · Maj + molette ou Page ↑ ↓ : angle de vue · Origine : vue large": "Drag or ← → : turn and look up · wheel or +/− : zoom · Shift + wheel or Page ↑ ↓ : view angle · Home : wide view",
  "Panorama 3D impossible : {error}": "3D panorama failed: {error}",
  "aucun relief SDF autour du site": "no SDF terrain around the site",
- "azimut {az:.1f}° — distance {d:.1f} {du} — altitude {alt:.0f} {hu}": "azimuth {az:.1f}° — distance {d:.1f} {du} — elevation {alt:.0f} {hu}",
- "Depuis le site": "From the site",
- "En orbite": "Orbit",
- "Vue 3D depuis le sommet de l'antenne, ou en orbite autour du site (vue d'ensemble : glisser pour tourner autour, molette pour s'approcher)": "3D view from the top of the antenna, or orbiting around the site (overview: drag to turn around, wheel to move closer)",
- "Caméra": "Camera",
- "Glisser ou ← → : tourner autour du site et incliner · molette ou +/− : s'approcher · Maj + molette ou Page ↑ ↓ : inclinaison · Origine : vue d'ensemble": "Drag or ← → : turn around the site and tilt · wheel or +/− : move closer · Shift + wheel or Page ↑ ↓ : tilt · Home : overview"
+ "azimut {az:.1f}° — distance {d:.1f} {du} — altitude {alt:.0f} {hu}": "azimuth {az:.1f}° — distance {d:.1f} {du} — elevation {alt:.0f} {hu}"
 }

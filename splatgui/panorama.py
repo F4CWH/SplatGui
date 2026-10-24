@@ -1080,6 +1080,7 @@ class PanoramaMap(QWidget):
         self._relief = None        # (clé, image du relief ombré du carré)
         self._drag = None          # (angle du pointeur, azimut central) au début du glisser
         self._moved = False
+        self.frame_widget = None   # vue dont la carte prend toute la largeur (panorama 3D), sinon cadre du 2D
         view.repainted.connect(self.update)
         self.setMouseTracking(True)
         self.setMinimumHeight(160)
@@ -1097,12 +1098,22 @@ class PanoramaMap(QWidget):
         self._relief = None
         self.update()
 
+    def set_frame_widget(self, widget):
+        """Carte alignée sur toute la largeur de `widget` (panorama 3D), ou sur le cadre du
+        panorama 2D (None)."""
+        self.frame_widget = widget
+        self.update()
+
     def _frame(self):
-        """Cadre de la carte, aligné sur celui du panorama."""
+        """Cadre de la carte, aligné sur celui du panorama (2D) ou sur la vue 3D."""
         lh = QFontMetricsF(self.font()).height()
-        pano = self.view._rect(self.view.width(), self.view.height())
-        left, right = pano.left(), pano.right()
-        if right - left < 50 or right > self.width():
+        if self.frame_widget is not None:
+            left = float(self.mapFromGlobal(self.frame_widget.mapToGlobal(QPointF(0, 0))).x())
+            right = left + self.frame_widget.width()
+        else:
+            pano = self.view._rect(self.view.width(), self.view.height())
+            left, right = pano.left(), pano.right()
+        if right - left < 50 or left < -0.5 or right > self.width() + 0.5:
             left, right = lh * 0.5, self.width() - lh * 0.5
         return QRectF(left, lh * 0.3, right - left, self.height() - lh * 0.6)
 
@@ -1497,6 +1508,7 @@ class PanoramaMap(QWidget):
         _hf, _hu, d_factor, d_unit = units(v._unit_profile())
         v.hovered.emit(tr("azimut {az:.1f}° — distance {d:.1f} {du}", az=hit[0], d=hit[1] / d_factor, du=d_unit))
         v.update()
+        self.update()      # aussi quand le panorama 2D est masqué (vue 3D affichée)
 
     def mouseReleaseEvent(self, event):
         if self._drag and not self._moved:
@@ -1506,6 +1518,7 @@ class PanoramaMap(QWidget):
         self._drag = None
         self.view._drag = None
         self.view.update()
+        self.update()
 
     def leaveEvent(self, _event):
         if self.view.cursor_az is None:
@@ -1513,6 +1526,7 @@ class PanoramaMap(QWidget):
         self.view.cursor_az = None
         self.view.hovered.emit("")
         self.view.update()
+        self.update()
 
 
 def site_markers(site, others, sdf_dirs, hd):

@@ -8,8 +8,7 @@ et réfraction, comme le panorama 2D) ; l'exagération du relief est une simple 
 modèle, l'œil étant à l'origine.
 
 Repère de la scène : x vers l'est, y vers le haut, z vers le sud (la caméra de Qt regarde vers -z,
-donc vers le nord à l'azimut 0). Deux caméras : au sommet de l'antenne (panorama), ou en orbite
-autour du pied du site, à distance réglable (vue d'ensemble).
+donc vers le nord à l'azimut 0). Caméra au sommet de l'antenne.
 
 Texture plaquée : dégradé d'altitude ou carte (tuiles en cache), couverture radio par-dessus.
 
@@ -44,8 +43,6 @@ MIN_FOV = 15.0
 NEUTRAL = (196, 200, 186)  # relief sans dégradé d'altitude
 COVERAGE_OPACITY = 0.8
 DRAPE_NEAR = 0.15          # abords du site couverts par la carte plaquée détaillée (part du rayon)
-ORBIT_PITCH = -35.0        # angle de vue initial en orbite (degrés, vers le bas)
-ORBIT_DISTANCE = 1.8       # distance initiale de la caméra en orbite (en rayons du panorama)
 
 QML = """
 import QtQuick
@@ -59,10 +56,7 @@ Item {
     property real fov: 90             // champ de vision horizontal (degrés)
     property real minFov: 15
     property real maxFov: 120
-    property bool orbit: false        // caméra en orbite autour du site (sinon au sommet de l'antenne)
-    property real distance: 100000    // distance de la caméra au pied du site en orbite (m)
     property real extent: 50000       // demi-côté du relief maillé (m)
-    property real siteDepth: 0        // pied du site sous l'œil (m, négatif)
     property real exaggeration: 1
     property url textureSource: ""
     property bool hasTerrain: false
@@ -71,17 +65,14 @@ Item {
     property color skyHorizon: "#d6e6f5"
 
     function changed() { bridge.view(yaw, pitch, fov) }
-    function clampPitch(p) { return orbit ? Math.max(-89, Math.min(-3, p)) : Math.max(-60, Math.min(60, p)) }
+    function clampPitch(p) { return Math.max(-60, Math.min(60, p)) }
     function turn(dyaw, dpitch) {
         yaw = ((yaw + dyaw) % 360 + 360) % 360
         pitch = clampPitch(pitch + dpitch)
         changed()
     }
     function zoom(factor) {
-        if (orbit)
-            distance = Math.max(extent * 0.03, Math.min(extent * 4, distance * factor))
-        else
-            fov = Math.max(minFov, Math.min(maxFov, fov * factor))
+        fov = Math.max(minFov, Math.min(maxFov, fov * factor))
         changed()
     }
 
@@ -106,24 +97,20 @@ Item {
                 color: root.skyHorizon
                 density: root.hazeDensity
                 depthEnabled: true
-                depthNear: root.orbit ? root.distance * 0.7 : root.extent * 0.02
-                depthFar: root.orbit ? root.distance + root.extent * 1.5 : root.extent
+                depthNear: root.extent * 0.02
+                depthFar: root.extent
                 depthCurve: 0.8
             }
         }
-        // Pivot au sommet de l'antenne (vue depuis le site) ou au pied du site (orbite) ; la
-        // caméra recule de `distance` en orbite
-        Node {
-            position: root.orbit ? Qt.vector3d(0, root.siteDepth * root.exaggeration, 0) : Qt.vector3d(0, 0, 0)
+        // Caméra au sommet de l'antenne (origine de la scène)
+        PerspectiveCamera {
+            id: camera
+            position: Qt.vector3d(0, 0, 0)
             eulerRotation: Qt.vector3d(root.pitch, -root.yaw, 0)
-            PerspectiveCamera {
-                id: camera
-                position: Qt.vector3d(0, 0, root.orbit ? root.distance : 0)
-                fieldOfView: root.fov
-                fieldOfViewOrientation: PerspectiveCamera.Horizontal
-                clipNear: root.orbit ? Math.max(2, root.distance * 0.01) : 2
-                clipFar: root.orbit ? root.distance + root.extent * 3 : root.extent * 1.6
-            }
+            fieldOfView: root.fov
+            fieldOfViewOrientation: PerspectiveCamera.Horizontal
+            clipNear: 2
+            clipFar: root.extent * 1.6
         }
         // Soleil au nord-ouest, comme l'ombrage des cartes, et lumière d'appoint zénithale
         DirectionalLight { eulerRotation: Qt.vector3d(-40, 45, 0); brightness: 1.0 }
@@ -154,7 +141,7 @@ Item {
         property real pitch0
         onActiveChanged: if (active) { yaw0 = root.yaw; pitch0 = root.pitch; root.forceActiveFocus() }
         onTranslationChanged: {
-            var k = root.orbit ? 0.3 : root.fov / Math.max(1, root.width)
+            var k = root.fov / Math.max(1, root.width)
             root.yaw = ((yaw0 - translation.x * k) % 360 + 360) % 360
             root.pitch = root.clampPitch(pitch0 + translation.y * k)
             root.changed()
@@ -185,7 +172,7 @@ Item {
         }
     }
     Keys.onPressed: (event) => {
-        var step = root.orbit ? 10 : root.fov / 12
+        var step = root.fov / 12
         if (event.key === Qt.Key_Left) root.turn(-step, 0)
         else if (event.key === Qt.Key_Right) root.turn(step, 0)
         else if (event.key === Qt.Key_PageUp || event.key === Qt.Key_Up) root.turn(0, 2)
@@ -268,7 +255,7 @@ def build_mesh(site, site_ground, sdf_dirs, hd, radius_km, height_m, k):
     return {"vertices": vertices.astype(np.float32).reshape(-1, 8), "indices": indices,
             "bounds": ((-half, float(y.min()), -half), (half, float(y.max()), half)),
             "axis": axis, "ground": ground, "half": half, "lat": lat, "lon": lon,
-            "eye": eye, "height": height_m, "k": k}
+            "eye": eye, "k": k}
 
 
 def _resample(mesh, size):
@@ -368,6 +355,7 @@ class Panorama3DView(QWidget):
 
     viewChanged = pyqtSignal(float, float)   # azimut au centre, champ de vision
     hovered = pyqtSignal(str)
+    cursorMoved = pyqtSignal(object)         # azimut survolé (degrés) ou None : curseur de la carte
     failed = pyqtSignal(str)
 
     def __init__(self, parent=None):
@@ -435,7 +423,6 @@ class Panorama3DView(QWidget):
         g.setBounds(QVector3D(*low), QVector3D(*high))
         g.update()
         self.root.setProperty("extent", mesh["half"])
-        self.root.setProperty("siteDepth", -mesh["height"])
         self.root.setProperty("hasTerrain", True)
         self.labels.update()
 
@@ -465,40 +452,21 @@ class Panorama3DView(QWidget):
         """Brume : part de la couleur de l'horizon au bord du rayon (0 = aucune)."""
         self.root.setProperty("hazeDensity", float(strength))
 
-    def orbit(self):
-        return bool(self.root.property("orbit"))
-
-    def set_orbit(self, orbit):
-        """Caméra en orbite autour du site (vue d'ensemble) ou au sommet de l'antenne."""
-        if orbit == self.orbit():
-            return
-        self.root.setProperty("orbit", bool(orbit))
-        self.home()
-
     def home(self):
-        """Vue de départ du mode courant : horizontale et large depuis le site ; en orbite,
-        plongeante, de assez loin pour voir tout le rayon."""
-        if self.orbit():
-            extent = float(self.root.property("extent"))
-            self.root.setProperty("distance", extent * ORBIT_DISTANCE)
-            self.root.setProperty("pitch", ORBIT_PITCH)
-            self.root.setProperty("fov", 60.0)
-        else:
-            self.root.setProperty("pitch", 0.0)
-            self.root.setProperty("fov", MAX_FOV)
+        """Vue de départ (touche Origine) : horizontale, champ le plus large."""
+        self.root.setProperty("pitch", 0.0)
+        self.root.setProperty("fov", MAX_FOV)
         self.labels.update()
         yaw, fov, pitch = self.view()
         self.bridge.view(yaw, pitch, fov)
 
-    def set_view(self, yaw=None, fov=None, pitch=None, distance=None):
+    def set_view(self, yaw=None, fov=None, pitch=None):
         if yaw is not None:
             self.root.setProperty("yaw", float(yaw) % 360)
         if fov is not None:
             self.root.setProperty("fov", min(MAX_FOV, max(MIN_FOV, float(fov))))
         if pitch is not None:
             self.root.setProperty("pitch", float(pitch))
-        if distance is not None:
-            self.root.setProperty("distance", float(distance))
         self.labels.update()
 
     def view(self):
@@ -520,39 +488,34 @@ class Panorama3DView(QWidget):
         self.labels.setGeometry(self.quick.geometry())
 
     def projector(self):
-        """(project, profondeur) : project(azimut, distance, hauteur) -> point à l'écran (pixels
-        logiques) ou None derrière la caméra, pour un point à `distance` m du site et `hauteur` m
-        sous ou sur l'œil (sans exagération, appliquée ici) ; profondeur(azimut, distance,
-        hauteur) -> distance du point au plan de la caméra (m)."""
+        """Fonction project(azimut, distance, hauteur) -> point à l'écran (pixels logiques) ou
+        None derrière la caméra, pour un point à `distance` m du site et `hauteur` m sous ou sur
+        l'œil (sans exagération, appliquée ici)."""
         yaw, fov, pitch = self.view()
         exaggeration = float(self.root.property("exaggeration")) or 1.0
-        orbit = self.orbit()
-        back = float(self.root.property("distance")) if orbit else 0.0
-        pivot_y = float(self.root.property("siteDepth")) * exaggeration if orbit else 0.0
         w, h = self.quick.width(), self.quick.height()
         focal = w / 2 / math.tan(math.radians(fov) / 2)
         cp, sp = math.cos(math.radians(pitch)), math.sin(math.radians(pitch))
 
-        def camera(azimuth, distance, height):
-            rel = math.radians(azimuth - yaw)
-            right, ahead, up = distance * math.sin(rel), distance * math.cos(rel), height * exaggeration - pivot_y
-            return right, up * cp - ahead * sp, ahead * cp + up * sp + back
-
         def project(azimuth, distance, height):
-            x, y, z = camera(azimuth, distance, height)
+            rel = math.radians(azimuth - yaw)
+            x, ahead, up = distance * math.sin(rel), distance * math.cos(rel), height * exaggeration
+            y, z = up * cp - ahead * sp, ahead * cp + up * sp
             return QPointF(w / 2 + focal * x / z, h / 2 - focal * y / z) if z > 1e-3 * max(1.0, distance) else None
 
-        return project, lambda azimuth, distance, height: camera(azimuth, distance, height)[2]
+        return project
 
     # Survol -------------------------------------------------------------------------------
 
     def _hover(self, x, y, z, hit):
         if not hit or self.mesh is None:
+            self.cursorMoved.emit(None)
             self.hovered.emit("")
             return
         exaggeration = float(self.root.property("exaggeration")) or 1.0
         distance = math.hypot(x, z)
         azimuth = math.degrees(math.atan2(x, -z)) % 360
+        self.cursorMoved.emit(azimuth)
         drop = distance ** 2 / (2 * self.mesh["k"] * EARTH_RADIUS_M)
         altitude = y / exaggeration + self.mesh["eye"] + drop
         h_factor, h_unit, d_factor, d_unit = units({"metric": self.metric})
@@ -563,11 +526,11 @@ class Panorama3DView(QWidget):
 class _Labels(QWidget):
     """Noms des localités et repères des autres sites par-dessus la vue 3D, avec les règles du
     panorama 2D : mêmes listes et même seuil d'habitants, repères placés en premier, puis villes
-    et localités les plus peuplées ; étiquette suspendue au-dessus de l'horizon (vue depuis le
-    site) ou du lieu (orbite), reliée au sol par un pointillé, taille et transparence selon la
-    distance. Les repères ont leur mât (du sol au sommet de l'antenne), en vert si le sommet est
-    visible depuis le site, en rouge s'il est masqué par le relief ; un lieu masqué a un pied
-    creux et son pointillé s'arrête sur la crête (vue depuis le site)."""
+    et localités les plus peuplées ; étiquette suspendue au-dessus de l'horizon, reliée au sol par
+    un pointillé, taille et transparence selon la distance. Les repères ont leur mât (du sol au
+    sommet de l'antenne), en vert si le sommet est visible depuis le site, en rouge s'il est masqué
+    par le relief ; un lieu masqué a un pied creux et son pointillé s'arrête sur la crête. Curseur
+    de l'azimut survolé (vue 3D ou carte), comme le panorama 2D."""
 
     SITE_COLOR = QColor(52, 120, 80)
     HIDDEN_COLOR = QColor(176, 64, 52)
@@ -582,31 +545,41 @@ class _Labels(QWidget):
         v2, v3 = self.source, self.view3d
         if v2 is None or not v2._view or v3.mesh is None or not v3.root.property("hasTerrain"):
             return
-        self.project, self.depth = v3.projector()
-        self.orbit = v3.orbit()
+        self.project = v3.projector()
         self.frame = QRectF(self.rect())
         self.lh = QFontMetricsF(self.font()).height()
         self.eye = v2.data["site_ground"] + v2.height_m
-        if self.orbit:
-            back = float(v3.root.property("distance"))
-            self.near, self.far = max(1.0, back - v3.mesh["half"]), back + v3.mesh["half"]
         placed = []
         markers, masts = self._layout_markers(placed)
         signs = self._layout_places(placed) if v2.show_places and v2.places else []
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         base = v2.palette().color(QPalette.ColorRole.Base)
-        if not self.orbit:
-            bottom = self._paint_azimuth_scale(painter, base)
-            self._paint_elevation_scale(painter, base, bottom)
+        bottom = self._paint_azimuth_scale(painter, base)
+        self._paint_elevation_scale(painter, base, bottom)
         v2._paint_place_signs(painter, signs, base, self.lh)
-        for x, bottom, top, hidden in masts:          # antennes des repères
+        for x, low, high, hidden in masts:            # antennes des repères
             painter.setPen(QPen(self.HIDDEN_COLOR if hidden else self.SITE_COLOR, 2))
-            painter.drawLine(QPointF(x, bottom), QPointF(x, top))
+            painter.drawLine(QPointF(x, low), QPointF(x, high))
         v2._draw_markers(painter, markers, base, self.lh)
-        if self.orbit:
-            self._paint_site(painter, base)
+        self._paint_cursor(painter, bottom)
         painter.end()
+
+    def _paint_cursor(self, painter, bottom):
+        """Azimut survolé (vue 3D ou carte) : trait vertical et point sur l'horizon visible."""
+        v2 = self.source
+        if v2.cursor_az is None:
+            return
+        horizon = float(np.interp(v2.cursor_az, v2.data["azimuth"], v2._view[3], period=360))
+        point = self.project(v2.cursor_az, 1.0, math.tan(math.radians(horizon)))
+        if point is None or not self.frame.left() <= point.x() <= self.frame.right():
+            return
+        highlight = v2.palette().color(QPalette.ColorRole.Highlight)
+        painter.setOpacity(1.0)
+        painter.setPen(QPen(highlight, 1))
+        painter.drawLine(QPointF(point.x(), self.frame.top()), QPointF(point.x(), bottom))
+        painter.setBrush(highlight)
+        painter.drawEllipse(point, 3.5, 3.5)
 
     def _paint_elevation_scale(self, painter, base, bottom):
         """Vue depuis le site, comme le panorama 2D : horizontale de l'observateur (angle de site
@@ -736,17 +709,8 @@ class _Labels(QWidget):
         """Hauteur (m) d'un point d'altitude donnée sous ou sur l'œil, courbure comprise."""
         return altitude - self.eye - distance ** 2 / (2 * self.source.k * EARTH_RADIUS_M)
 
-    def _depth_t(self, azimuth, distance, height):
-        """Profondeur 0 (proche) à 1 (loin) : taille et transparence des étiquettes."""
-        if self.orbit:         # selon l'éloignement de la caméra
-            return min(1.0, max(0.0, (self.depth(azimuth, distance, height) - self.near) / (self.far - self.near)))
-        return self.source._depth(distance)
-
     def _sky_y(self, azimuth, point):
-        """Ordonnée au-dessus de laquelle l'étiquette est suspendue : horizon dans cette
-        direction (vue depuis le site), le point lui-même en orbite."""
-        if self.orbit:
-            return point.y()
+        """Ordonnée au-dessus de laquelle l'étiquette est suspendue : horizon dans cette direction."""
         v2 = self.source
         ridge = float(np.interp(azimuth, v2.data["azimuth"], v2._view[3], period=360))
         sky = self.project(azimuth, 1.0, math.tan(math.radians(ridge)))
@@ -757,7 +721,7 @@ class _Labels(QWidget):
         ou None si aucune place (mêmes règles que le panorama 2D)."""
         rect, lh = self.frame, self.lh
         left = min(max(x - width / 2, rect.left() + 3), rect.right() - 3 - width)
-        target = sky_y - lh * (0.4 + (1.2 if self.orbit else 2.8) * (1 - t)) - sign_h
+        target = sky_y - lh * (0.4 + 2.8 * (1 - t)) - sign_h
         lowest = sky_y - lh * 0.3 - sign_h
         step = (sign_h + lh * 0.2) / 2
         for offset in (0, -1, 1, -2, 2, -3, 3, -4, -5, -6):
@@ -802,19 +766,16 @@ class _Labels(QWidget):
                 continue
             if top.y() > ground.y() - lh * 1.5:          # antenne trop courte à l'écran : mât de longueur fixe
                 top = QPointF(top.x(), ground.y() - lh * 1.5)
-            t = self._depth_t(azimuth, distance, top_h)
+            t = v2._depth(distance)
             font, fm = v2._sign_font(lh, t)
             label = f"{name} · {distance / d_factor:.1f} {d_unit}"
             sign_h = fm.height() * 1.25
-            box = self._fit(top.x(), self._sky_y(azimuth, top) if not self.orbit else top.y(), t,
+            box = self._fit(top.x(), self._sky_y(azimuth, top), t,
                             fm.horizontalAdvance(label) + sign_h * 0.8, sign_h, placed)
             if box is None:
                 continue
             hidden, crest_y = self._crest(azimuth, distance, top_h)
-            if self.orbit:                              # vu d'en haut : mât entier, couleur selon la visibilité
-                masts.append((top.x(), ground.y(), top.y(), hidden))
-                foot_y = top.y()
-            elif hidden:                                # caché : pointillé arrêté sur la crête, pas de mât
+            if hidden:                                  # caché : pointillé arrêté sur la crête, pas de mât
                 foot_y = crest_y if crest_y is not None else top.y()
             else:                                       # pied éventuellement caché par une crête
                 ground_hidden, ground_crest = self._crest(azimuth, distance, ground_h)
@@ -839,7 +800,7 @@ class _Labels(QWidget):
             ground = self.project(azimuth, distance, height)
             if not self._on_screen(ground):
                 continue
-            t = self._depth_t(azimuth, distance, height)
+            t = v2._depth(distance)
             font, fm = v2._sign_font(lh, t)
             name = place["name"].upper()
             pad = fm.height() * 0.25
@@ -847,39 +808,13 @@ class _Labels(QWidget):
                             fm.horizontalAdvance(name) + 2 * pad, fm.height(), placed)
             if box is None:
                 continue
-            if self.orbit:     # vu d'en haut : pas de masque calculé depuis le site
-                hidden, foot_y = False, ground.y()
-            else:
-                hidden, crest_y = self._crest(azimuth, distance, height)
-                foot_y = crest_y if hidden and crest_y is not None else ground.y()
+            hidden, crest_y = self._crest(azimuth, distance, height)
+            foot_y = crest_y if hidden and crest_y is not None else ground.y()
             placed.append(box)
             signs.append((distance, t, ground.x(), box, font, fm, pad, name, hidden,
                           min(foot_y, self.frame.bottom() - 1)))
         return signs
 
-    def _paint_site(self, painter, base):
-        """Site vu en orbite : mât du sol au sommet de l'antenne et nom dans une pastille."""
-        v2, mesh, lh = self.source, self.view3d.mesh, self.lh
-        foot, top = self.project(0.0, 0.0, -mesh["height"]), self.project(0.0, 0.0, 0.0)
-        if foot is None or top is None:
-            return
-        color = self.SITE_COLOR
-        if top.y() > foot.y() - lh * 1.5:     # antenne trop courte à l'écran : mât de longueur fixe
-            top = QPointF(foot.x(), foot.y() - lh * 1.5)
-        painter.setOpacity(1.0)
-        painter.setPen(QPen(color, 2))
-        painter.drawLine(foot, top)
-        painter.setBrush(color)
-        painter.drawEllipse(foot, lh * 0.18, lh * 0.18)
-        font, fm = v2._sign_font(lh, 0.0)
-        label = v2.site["name"]
-        h = fm.height() * 1.25
-        box = QRectF(top.x() - (fm.horizontalAdvance(label) + h * 0.8) / 2, top.y() - h,
-                     fm.horizontalAdvance(label) + h * 0.8, h)
-        painter.setBrush(base)
-        painter.drawRoundedRect(box, h / 2, h / 2)
-        painter.setFont(font)
-        painter.drawText(box, Qt.AlignmentFlag.AlignCenter, label)
 
 
 def _ground_at(mesh, east, north):

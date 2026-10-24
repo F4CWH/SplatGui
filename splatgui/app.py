@@ -84,11 +84,36 @@ def spin(minimum, maximum, decimals=3, step=1.0, suffix=""):
     return box
 
 
+def fit_popup(combo):
+    """Liste dépliée au moins aussi large que son texte le plus long (recalculé quand les
+    éléments changent), même si la liste fermée est plus étroite."""
+    def fit(*_args):
+        view = combo.view()
+        view.setMinimumWidth(view.sizeHintForColumn(0) + view.verticalScrollBar().sizeHint().width()
+                             + 2 * view.frameWidth() + 8)
+    model = combo.model()
+    for signal in (model.rowsInserted, model.rowsRemoved, model.modelReset, model.dataChanged):
+        signal.connect(fit)
+    fit()
+
+
 def scrollable(widget):
     """Onglet défilant verticalement, ajusté à la largeur disponible : les intitulés des
-    formulaires passent au-dessus de leur champ quand la place manque."""
+    formulaires passent au-dessus de leur champ quand la place manque, et les listes déroulantes
+    ne fixent pas la largeur de la colonne (une dizaine de caractères au minimum, texte complet
+    dans la liste dépliée)."""
     for form in widget.findChildren(QFormLayout):
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+    for combo in widget.findChildren(QComboBox):
+        # Comparaison sur sizeHint : minimumSizeHint, une fois calculé, reste en cache
+        policy, length, width = combo.sizeAdjustPolicy(), combo.minimumContentsLength(), combo.sizeHint().width()
+        combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        combo.setMinimumContentsLength(10)
+        if combo.sizeHint().width() > width:             # liste courte (unités…) : inchangée
+            combo.setMinimumContentsLength(length)
+            combo.setSizeAdjustPolicy(policy)
+            continue
+        fit_popup(combo)
     area = QScrollArea()
     area.setWidgetResizable(True)
     area.setWidget(widget)
@@ -1701,16 +1726,17 @@ class MainWindow(QMainWindow):
             "Conseillé avec l'IGN (sol nu) ; SRTM et Copernicus incluent déjà une partie du sursol."))
         self.clutter_check.toggled.connect(self.changed)
         relief.addWidget(self.clutter_check)
-        clutter_row = QHBoxLayout()
+        # Hauteurs du sursol sur deux lignes (deux par ligne) : la colonne des paramètres reste étroite
+        clutter_row = QGridLayout()
         clutter_row.setContentsMargins(20, 0, 0, 0)
         self.clutter_heights = {}
-        for key, label in (("trees", N_("Arbres")), ("built", N_("Bâti")), ("shrubs", N_("Arbustes"))):
+        for i, (key, label) in enumerate((("trees", N_("Arbres")), ("built", N_("Bâti")), ("shrubs", N_("Arbustes")))):
             box = spin(0, 100, 1, 1.0, " m")
             box.valueChanged.connect(self.changed)
-            clutter_row.addWidget(QLabel(tr(label)))
-            clutter_row.addWidget(box)
+            clutter_row.addWidget(QLabel(tr(label)), i // 2, 2 * (i % 2))
+            clutter_row.addWidget(box, i // 2, 2 * (i % 2) + 1)
             self.clutter_heights[key] = box
-        clutter_row.addStretch()
+        clutter_row.setColumnStretch(4, 1)
         relief.addLayout(clutter_row)
         self.clutter_check.toggled.connect(lambda on: [b.setEnabled(on) for b in self.clutter_heights.values()])
         sdf_row = QVBoxLayout()
@@ -1733,7 +1759,7 @@ class MainWindow(QMainWindow):
         open_terrain = QPushButton(tr("Ouvrir le dossier du relief"))
         open_terrain.clicked.connect(self._open_terrain_dir)
         terrain_buttons.addWidget(open_terrain)
-        self.dted_button = QPushButton(tr("Importer un relief (DTED, GeoTIFF, ASCII Grid, Surfer, BIL, XYZ, SRTM)…"))
+        self.dted_button = QPushButton(tr("Importer un relief"))
         self.dted_button.setToolTip(tr(
             "Convertit ses propres fichiers de relief en SDF dans le dossier SDF ci-dessus.\n"
             "DTED (.dt0, .dt1, .dt2) : SDF HD (1\") pour le .dt2, standard (3\") sinon.\n"
@@ -1950,16 +1976,6 @@ class MainWindow(QMainWindow):
         self.pano_renderer.setToolTip(tr("Panorama dessiné en 2D, ou relief en 3D avec la couverture radio "
                                          "plaquée (carte graphique Direct3D 11 nécessaire)"))
         bar.addWidget(labeled(tr("Rendu"), self.pano_renderer))
-        self.pano_camera = QComboBox()
-        self.pano_camera.addItem(tr("Depuis le site"), "site")
-        self.pano_camera.addItem(tr("En orbite"), "orbit")
-        self.pano_camera.setToolTip(tr("Vue 3D depuis le sommet de l'antenne, ou en orbite autour du site "
-                                       "(vue d'ensemble : glisser pour tourner autour, molette pour s'approcher)"))
-        stored = self.settings.get("panorama_camera", "site")
-        self.pano_camera.setCurrentIndex(max(0, self.pano_camera.findData(stored)))
-        self.pano_camera.currentIndexChanged.connect(self._panorama_camera_changed)
-        self.pano_camera_box = labeled(tr("Caméra"), self.pano_camera)
-        bar.addWidget(self.pano_camera_box)
         self.pano_radius = QDoubleSpinBox()
         self.pano_radius.setRange(2, 200)
         self.pano_radius.setDecimals(0)
@@ -3144,11 +3160,10 @@ class MainWindow(QMainWindow):
             self.pano_view3d.set_exaggeration(factor or 1.0)       # Auto : relief à l'échelle réelle
 
     def _panorama_hovered(self, text):
-        orbit = self._panorama_3d_active() and self.pano_view3d.orbit()
-        self.pano_hover.setText(text or (tr("Glisser ou ← → : tourner autour du site et incliner · molette ou +/− : "
-                                            "s'approcher · Maj + molette ou Page ↑ ↓ : inclinaison · Origine : "
-                                            "vue d'ensemble") if orbit else
-                                         tr("Glisser ou ← → : tourner et lever les yeux · molette ou +/− : zoom · "
+        if self._panorama_3d_active():          # curseur de la vue 3D ou de la carte sur l'autre
+            self.pano_view3d.labels.update()
+            self.pano_map.update()
+        self.pano_hover.setText(text or (tr("Glisser ou ← → : tourner et lever les yeux · molette ou +/− : zoom · "
                                             "Maj + molette ou Page ↑ ↓ : angle de vue · Origine : vue large")
                                          if self._panorama_3d_active() else
                                          tr("Molette ou +/− : zoom · glisser ou ← → : tourner · Maj + molette ou Page ↑ ↓ : angle de vue · Origine ou double-clic : vue complète")))
@@ -3178,28 +3193,28 @@ class MainWindow(QMainWindow):
             view.hovered.connect(self._panorama_hovered)
             view.failed.connect(self._panorama_3d_failed)
             view.set_places_source(self.pano_view)
-            view.set_orbit(self.pano_camera.currentData() == "orbit")
+            view.cursorMoved.connect(self._panorama_3d_cursor)
             self.pano_view3d = view
             self.pano_stack.addWidget(view)
         self.pano_stack.setCurrentWidget(self.pano_view3d if want3d else self.pano_view)
+        self.pano_map.set_frame_widget(self.pano_view3d if want3d else None)   # même largeur que le panorama
         for widget in (self.pano_gradient, self.pano_contours):
             widget.setEnabled(not want3d)
         self.pano_coverage.setVisible(want3d)
-        self.pano_camera_box.setVisible(want3d)
         self._panorama_hovered("")
         if want3d:
             self._panorama_3d_follow()
             self._update_panorama3d()
 
-    def _panorama_camera_changed(self, _index):
-        self.settings["panorama_camera"] = self.pano_camera.currentData()
-        if self.pano_view3d:
-            self.pano_view3d.set_orbit(self.pano_camera.currentData() == "orbit")
-            self._panorama_hovered("")
+    def _panorama_3d_cursor(self, azimuth):
+        """Azimut survolé dans la vue 3D : curseur reporté sur la carte (comme le panorama 2D)."""
+        self.pano_view.cursor_az = azimuth
+        self.pano_map.update()
 
     def _panorama_3d_failed(self, message):
         """Vue 3D indisponible (Qt Quick 3D absent, carte graphique) : retour au panorama 2D."""
         if self.pano_view3d is not None:
+            self.pano_map.set_frame_widget(None)
             self.pano_stack.removeWidget(self.pano_view3d)
             self.pano_view3d.deleteLater()
             self.pano_view3d = None
