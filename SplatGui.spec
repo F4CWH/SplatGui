@@ -1,6 +1,6 @@
 # Compilation de SPLAT!Gui : pyinstaller SplatGui.spec --noconfirm
 # Résultat : dist/SPLAT!Gui/SPLAT!Gui.exe, bibliothèques dans dist/SPLAT!Gui/lib (au lieu de _internal),
-# données livrées (geojson, icons, antennas) copiées à côté de l'exécutable. Les répertoires de
+# données livrées (geojson, icons, antennas/MSI) copiées à côté de l'exécutable. Les répertoires de
 # travail (bin, deps, tools, terrain, profiles, runs) sont créés au premier lancement.
 
 import shutil
@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(SPECPATH)
 NAME = "SPLAT!Gui"
-DATA_DIRS = ("geojson", "icons", "antennas")
+DATA_DIRS = ("geojson", "icons", "antennas/MSI")    # antennes : modèles MSI livrés seulement (pas sources/ ni imports)
 
 a = Analysis(
     [str(ROOT / "main.py")],
