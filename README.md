@@ -8,7 +8,7 @@ SPLAT!Gui prépare les fichiers d'entrée de SPLAT! (sites `.qth`, paramètres I
 
 Code source : <https://github.com/F4CWH/SplatGui>
 
-![Capture d'écran SPLAT!Gui](capture_splatgui.png)
+![Capture d'écran SPLAT!Gui](capture_splatgui_2.png)
 
 ## Fonctionnalités
 
