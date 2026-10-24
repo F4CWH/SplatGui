@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 from PyQt6.QtCore import (
-    QByteArray, QProcess, QProcessEnvironment, Qt, QThread, QTimer, QUrl, pyqtSignal,
+    QByteArray, QPoint, QProcess, QProcessEnvironment, QRect, QSize, Qt, QThread, QTimer, QUrl, pyqtSignal,
 )
 from PyQt6.QtGui import (
     QAction, QActionGroup, QColor, QDesktopServices, QFontDatabase, QFontMetricsF, QIcon, QImage, QKeySequence, QPainter,
@@ -21,12 +21,12 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGridLayout, QGroupBox,
     QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit, QListWidget,
     QListWidgetItem, QMainWindow, QMenu, QMessageBox, QProgressBar, QPlainTextEdit, QPushButton, QRadioButton,
-    QScrollArea, QSlider, QSplitter, QStackedWidget, QTableWidget, QTableWidgetItem, QTabWidget, QToolBar,
+    QLayout, QScrollArea, QSlider, QSplitter, QStackedWidget, QTableWidget, QTableWidgetItem, QTabWidget, QToolBar,
     QVBoxLayout, QWidget,
 )
 
 from . import (
-    CREDITS, LICENSE_SHORT, SOURCE_URL, __version__, antenna_ui, antennas, basemap, cables, dem, dted, help, hillshade, i18n, layers, layout, linkprofile, livemap, mappicker, prereqs,
+    CREDITS, LICENSE_SHORT, SOURCE_URL, __version__, antenna_ui, antennas, basemap, cables, dem, dted, googleearth, help, hillshade, i18n, layers, layout, linkprofile, livemap, mappicker, palettes, panorama, prereqs,
     sites, splat, storage, terrain, themes,
 )
 from .widgets import FileList, HorizontalScroll, ImageView, PathEdit, SliderValue, graduate
@@ -95,6 +95,73 @@ def scrollable(widget):
     area.setFrameShape(QScrollArea.Shape.NoFrame)
     area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
     return area
+
+
+class FlowLayout(QLayout):
+    """Disposition en lignes qui passent à la ligne quand la largeur manque (barres d'outils des
+    onglets) : sa largeur minimale est celle de son plus large élément, pas de leur somme."""
+
+    def __init__(self, parent=None, spacing=6):
+        super().__init__(parent)
+        self._items = []
+        self.setContentsMargins(0, 0, 0, 0)
+        self.setSpacing(spacing)
+
+    def addItem(self, item):
+        self._items.append(item)
+
+    def count(self):
+        return len(self._items)
+
+    def itemAt(self, index):
+        return self._items[index] if 0 <= index < len(self._items) else None
+
+    def takeAt(self, index):
+        return self._items.pop(index) if 0 <= index < len(self._items) else None
+
+    def expandingDirections(self):
+        return Qt.Orientation(0)
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return self._arrange(QRect(0, 0, width, 0), True)
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self._arrange(rect, False)
+
+    def sizeHint(self):
+        return self.minimumSize()
+
+    def minimumSize(self):
+        size = QSize()
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+        return size
+
+    def _arrange(self, rect, test):
+        x, y, line = rect.x(), rect.y(), 0
+        for item in self._items:
+            hint = item.sizeHint()
+            if x > rect.x() and x + hint.width() > rect.right() + 1:
+                x, y, line = rect.x(), y + line + self.spacing(), 0
+            if not test:
+                item.setGeometry(QRect(QPoint(x, y), hint))
+            x += hint.width() + self.spacing()
+            line = max(line, hint.height())
+        return y + line - rect.y()
+
+
+def labeled(text, widget):
+    """Intitulé et champ gardés ensemble sur une même ligne d'une FlowLayout."""
+    box = QWidget()
+    row = QHBoxLayout(box)
+    row.setContentsMargins(0, 0, 0, 0)
+    row.addWidget(QLabel(text))
+    row.addWidget(widget)
+    return box
 
 
 # --- Préparation du relief en arrière-plan ------------------------------------
@@ -1070,6 +1137,10 @@ class MainWindow(QMainWindow):
             splitter = getattr(self, name, None)
             if isinstance(splitter, QSplitter) and isinstance(state, str):
                 splitter.restoreState(QByteArray.fromBase64(state.encode()))
+        # Colonne des paramètres écrasée (largeur minimale des résultats trop grande) : proportions par défaut
+        sizes = self.main_splitter.sizes()
+        if sum(sizes) and sizes[0] < 0.2 * sum(sizes):
+            self.main_splitter.setSizes([sum(sizes) // 3, sum(sizes) - sum(sizes) // 3])
 
     def _build_params_panel(self):
         tabs = QTabWidget()
@@ -1240,8 +1311,8 @@ class MainWindow(QMainWindow):
         buttons.addStretch()
         layout.addLayout(buttons)
 
-        note = QLabel(tr("SPLAT! applique le diagramme en perte de trajet / champ (-L) et en point à point ; "
-                      "la couverture en visibilité (-c) l'ignore. La PAR doit inclure le gain de l'antenne."))
+        note = QLabel(tr("SPLAT! applique le diagramme en couverture régionale / champ (-L) et en point à point ; "
+                      "la couverture visuelle (LOS) (-c) l'ignore. La PAR doit inclure le gain de l'antenne."))
         note.setWordWrap(True)
         note.setStyleSheet("color: gray;")
         layout.addWidget(note)
@@ -1847,12 +1918,155 @@ class MainWindow(QMainWindow):
         self.profile_hover = QLabel()
         self.profile_view.hovered.connect(self.profile_hover.setText)
         pl.addLayout(top)
-        pl.addWidget(self.profile_view, 1)
+        profile_scroll = QScrollArea()
+        profile_scroll.setWidgetResizable(True)
+        profile_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        profile_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        profile_scroll.setWidget(self.profile_view)
+        pl.addWidget(profile_scroll, 1)
         pl.addWidget(self.profile_hover)
         self.profile_tab = self.results_tabs.addTab(profile_page, tr("Profil"))
         self.profile_request = None          # (paramètres, dossier) du calcul point à point affiché
         self.profile_data = []               # profils calculés, un par émetteur
         self.results_tabs.currentChanged.connect(lambda _i: self._update_profile())
+
+        # Panorama à 360° du relief vu depuis un émetteur (à la hauteur de son antenne)
+        pano_page = QWidget()
+        pv = QVBoxLayout(pano_page)
+        bar = FlowLayout()                   # réglages passant à la ligne quand la place manque
+        self.pano_tx = QComboBox()
+        self.pano_tx.setToolTip(tr("Site d'où le panorama est vu"))
+        self.pano_tx.currentIndexChanged.connect(lambda _i: self._update_panorama())
+        bar.addWidget(self.pano_tx)
+        self.pano_radius = QDoubleSpinBox()
+        self.pano_radius.setRange(2, 200)
+        self.pano_radius.setDecimals(0)
+        self.pano_radius.setValue(float(self.settings.get("panorama_radius_km", 60)))
+        self.pano_radius.setSuffix(" km")
+        self.pano_radius.setKeyboardTracking(False)
+        self.pano_radius.valueChanged.connect(self._panorama_radius_changed)
+        bar.addWidget(labeled(tr("Rayon"), self.pano_radius))
+        self.pano_fov = QComboBox()
+        for fov in panorama.FOV_STEPS:
+            self.pano_fov.addItem(f"{fov}°", float(fov))
+        self.pano_fov.setToolTip(tr("Champ de vision horizontal du panorama (aussi : molette ou +/−)"))
+        stored = float(self.settings.get("panorama_fov", panorama.DEFAULT_FOV))
+        self.pano_fov.setCurrentIndex(max(0, self.pano_fov.findData(stored)))
+        self.pano_fov.currentIndexChanged.connect(self._panorama_fov_changed)
+        bar.addWidget(labeled(tr("Champ de vision"), self.pano_fov))
+        self.pano_exaggeration = QComboBox()
+        self.pano_exaggeration.addItem(tr("Auto"), 0.0)
+        for factor in (1, 2, 3, 5, 10, 20, 50):
+            self.pano_exaggeration.addItem(f"× {factor}", float(factor))
+        self.pano_exaggeration.setToolTip(tr("Exagération verticale du relief ; Auto : relief ajusté à la hauteur "
+                                             "de la vue (facteur indiqué en haut à droite)"))
+        stored = float(self.settings.get("panorama_exaggeration", 1.0))
+        self.pano_exaggeration.setCurrentIndex(max(0, self.pano_exaggeration.findData(stored)))
+        self.pano_exaggeration.currentIndexChanged.connect(self._panorama_exaggeration_changed)
+        bar.addWidget(labeled(tr("Relief"), self.pano_exaggeration))
+        self.pano_drape = QComboBox()
+        self.pano_drape.addItem(tr("Aucun"), "")
+        for source in panorama.DRAPE_SOURCES:
+            self.pano_drape.addItem(tr(basemap.SOURCES[source]["label"]), source)
+        self.pano_drape.setToolTip(tr("Carte plaquée sur le relief du panorama (tuiles mises en cache)"))
+        stored = self.settings.get("panorama_drape", "")
+        self.pano_drape.setCurrentIndex(max(0, self.pano_drape.findData(stored)))
+        self.pano_drape.currentIndexChanged.connect(self._panorama_drape_changed)
+        bar.addWidget(labeled(tr("Placage"), self.pano_drape))
+        self.pano_palette = QComboBox()
+        for name, (label, _stops) in panorama.PALETTES.items():
+            self.pano_palette.addItem(tr(label), name)
+        self.pano_palette.setToolTip(tr("Dégradé de couleurs selon l'altitude du relief (sans carte plaquée)"))
+        stored = self.settings.get("panorama_palette", palettes.DEFAULT_PALETTE)
+        self.pano_palette.setCurrentIndex(max(0, self.pano_palette.findData(stored)))
+        self.pano_palette.currentIndexChanged.connect(self._panorama_palette_changed)
+        bar.addWidget(labeled(tr("Couleurs"), self.pano_palette))
+        self.pano_gradient = QComboBox()
+        for mode, label in panorama.GRADIENT_MODES:
+            self.pano_gradient.addItem(tr(label), mode)
+        self.pano_gradient.setToolTip(tr("Sens du dégradé de couleurs : vertical selon l'altitude du relief, "
+                                         "horizontal selon la distance au site (du premier plan à l'horizon)"))
+        stored = self.settings.get("panorama_gradient", "altitude")
+        self.pano_gradient.setCurrentIndex(max(0, self.pano_gradient.findData(stored)))
+        self.pano_gradient.currentIndexChanged.connect(self._panorama_gradient_changed)
+        bar.addWidget(self.pano_gradient)
+        self.pano_contours = QCheckBox(tr("Courbes de niveau"))
+        self.pano_contours.setToolTip(tr("Courbes de niveau (maîtresse toutes les cinq) sur le panorama et "
+                                         "la carte, sans bandes de couleur"))
+        self.pano_contours.setChecked(bool(self.settings.get("panorama_contours", False)))
+        self.pano_contours.toggled.connect(self._panorama_contours_toggled)
+        bar.addWidget(self.pano_contours)
+        self.pano_horizon = QCheckBox(tr("Ligne d'horizon"))
+        self.pano_horizon.setToolTip(tr("Sur la carte : distance du relief qui ferme la vue depuis le site, "
+                                        "azimut par azimut (au-delà, rien n'est visible)"))
+        self.pano_horizon.setChecked(bool(self.settings.get("panorama_map_horizon", True)))
+        self.pano_horizon.toggled.connect(self._panorama_horizon_toggled)
+        bar.addWidget(self.pano_horizon)
+        self.pano_haze = QComboBox()
+        for label, strength in panorama.HAZE_LEVELS:
+            self.pano_haze.addItem(tr(label), strength)
+        self.pano_haze.setToolTip(tr("Atténuation des couleurs avec la distance (brume vers l'horizon)"))
+        stored = float(self.settings.get("panorama_haze", 0.6))
+        self.pano_haze.setCurrentIndex(max(0, self.pano_haze.findData(stored)))
+        self.pano_haze.currentIndexChanged.connect(self._panorama_haze_changed)
+        bar.addWidget(labeled(tr("Brume"), self.pano_haze))
+        self.pano_places_check = QCheckBox(tr("Localités"))
+        self.pano_places_check.setToolTip(tr("Noms des villes, bourgs et villages (OpenStreetMap, mis en cache ; "
+                                             "à défaut, calque GeoJSON local « communes »)"))
+        self.pano_places_check.setChecked(bool(self.settings.get("panorama_places", True)))
+        self.pano_places_check.toggled.connect(self._panorama_places_toggled)
+        bar.addWidget(self.pano_places_check)
+        self.pano_population = QComboBox()
+        for value in panorama.POPULATION_STEPS:
+            self.pano_population.addItem(tr("Toutes") if not value else f"+{value:,}".replace(",", "\u202f"), value)
+        self.pano_population.setToolTip(tr("Localités affichées selon leur nombre d'habitants (OpenStreetMap). "
+                                           "Les villages ne sont recherchés qu'à moins de {km} km.",
+                                           km=panorama.VILLAGE_RADIUS_KM))
+        stored = int(self.settings.get("panorama_min_population", 20000))
+        self.pano_population.setCurrentIndex(max(0, self.pano_population.findData(stored)))
+        self.pano_population.currentIndexChanged.connect(self._panorama_population_changed)
+        self.pano_population.setEnabled(self.pano_places_check.isChecked())
+        self.pano_places_check.toggled.connect(self.pano_population.setEnabled)
+        bar.addWidget(self.pano_population)
+        self.pano_north_button = QPushButton(tr("Nord"))
+        self.pano_north_button.setToolTip(tr("Recentre le panorama et la carte sur le nord (azimut 0°)"))
+        self.pano_north_button.clicked.connect(lambda: self.pano_view.center_on(0))
+        bar.addWidget(self.pano_north_button)
+        self.pano_rx_button = QPushButton(tr("Vers le récepteur"))
+        self.pano_rx_button.clicked.connect(self._panorama_to_receiver)
+        bar.addWidget(self.pano_rx_button)
+        pano_export = QPushButton(tr("Exporter (PNG)…"))
+        pano_export.clicked.connect(self._export_panorama)
+        bar.addWidget(pano_export)
+        self.pano_view = panorama.PanoramaView()
+        self.pano_view.set_exaggeration(self.pano_exaggeration.currentData())
+        self.pano_view.set_palette(self.pano_palette.currentData())
+        self.pano_view.set_haze(self.pano_haze.currentData())
+        self.pano_view.set_contours(self.pano_contours.isChecked())
+        self.pano_view.set_gradient_mode(self.pano_gradient.currentData())
+        self.pano_view.set_show_places(self.pano_places_check.isChecked())
+        self.pano_view.set_min_population(self.pano_population.currentData())
+        self.pano_view.set_fov(self.pano_fov.currentData())
+        self.pano_view.repainted.connect(self._panorama_fov_sync)
+        self.pano_hover = QLabel(tr("Molette ou +/− : zoom · glisser ou ← → : tourner · Maj + molette ou Page ↑ ↓ : angle de vue · Origine ou double-clic : vue complète"))
+        self.pano_view.hovered.connect(lambda text: self.pano_hover.setText(text or tr("Molette ou +/− : zoom · glisser ou ← → : tourner · Maj + molette ou Page ↑ ↓ : angle de vue · Origine ou double-clic : vue complète")))
+        self.pano_hover.setWordWrap(True)
+        pv.addLayout(bar)
+        # Panorama sur une partie de la hauteur disponible (HEIGHT_FRACTION), carte orientée en dessous
+        self.pano_map = panorama.PanoramaMap(self.pano_view)
+        self.pano_map.set_show_horizon(self.pano_horizon.isChecked())
+        pv.addWidget(self.pano_view, round(100 * panorama.HEIGHT_FRACTION))
+        pv.addWidget(self.pano_hover)
+        pv.addWidget(self.pano_map, round(100 * (1 - panorama.HEIGHT_FRACTION)))
+        self.pano_tab = self.results_tabs.addTab(pano_page, tr("Panorama"))
+        self.pano_request = None             # (paramètres, dossier) du calcul affiché
+        self.pano_shown = None               # clé du panorama affiché
+        self.pano_cache = {}                 # (dossier, émetteur, rayon) -> relief échantillonné
+        self.pano_places = {}                # (dossier, émetteur, rayon) -> localités jusqu'aux coins de la carte
+        self.pano_textures = {}              # ((dossier, émetteur, rayon), source) -> couleurs plaquées
+        self.pano_map_layers = {}            # (dossier, émetteur, rayon) -> relief de la carte
+        self.pano_terrain = None             # (dossiers SDF, HD) du panorama affiché
+        self.results_tabs.currentChanged.connect(lambda _i: self._update_panorama())
 
         # Fichiers
         files = QWidget()
@@ -2655,10 +2869,20 @@ class MainWindow(QMainWindow):
             self.profile_tx.addItem(site["name"])
         self.profile_tx.blockSignals(False)
         self.profile_tx.setVisible(self.profile_tx.count() > 1)
+        self.pano_request = (params, self.shown_dir) if params and params.get("tx_sites") else None
+        self.pano_tx.blockSignals(True)
+        self.pano_tx.clear()
+        for site in (params["tx_sites"] if self.pano_request else []):
+            self.pano_tx.addItem(site["name"])
+        self.pano_tx.blockSignals(False)
+        self.pano_tx.setVisible(self.pano_tx.count() > 1)
+        self.pano_rx_button.setVisible(bool(self.pano_request) and params["mode"] == "p2p")
+        self.pano_shown = None
         if switch_tab:
             self.results_tabs.setCurrentIndex(self.profile_tab if self.profile_request
                                               else 2 if images else 1 if texts else 0)
         self._update_profile()
+        self._update_panorama()
 
     def _run_params_for(self, run_dir):
         """Paramètres du calcul d'un dossier, d'après l'historique (enregistrés au lancement)."""
@@ -2679,6 +2903,9 @@ class MainWindow(QMainWindow):
             try:
                 sdf_dir = splat.effective_sdf_dir(params)
                 self.profile_data = [linkprofile.compute(params, tx, sdf_dir=sdf_dir) for tx in params["tx_sites"]]
+                for tx, profile in zip(params["tx_sites"], self.profile_data):
+                    if profile:
+                        profile["report"] = linkprofile.read_report(run_dir, tx["name"])
             except (OSError, ValueError, KeyError) as exc:
                 self.profile_data = []
                 self.profile_summary.setText(tr("Profil impossible : {exc}", exc=exc))
@@ -2687,8 +2914,193 @@ class MainWindow(QMainWindow):
                 QApplication.restoreOverrideCursor()
         profile = self.profile_data[max(0, self.profile_tx.currentIndex())] if self.profile_data else None
         self.profile_view.set_profile(profile)
-        self.profile_summary.setText(linkprofile.summary(profile) if profile
-                                     else tr("Émetteur et récepteur confondus."))
+        self.profile_summary.setText("" if profile else tr("Émetteur et récepteur confondus."))
+
+    # ---- Panorama -------------------------------------------------------------
+
+    def _update_panorama(self):
+        """Échantillonne (une fois par émetteur et rayon) le relief autour de l'émetteur et
+        affiche le panorama, quand l'onglet Panorama est visible."""
+        if self.results_tabs.currentIndex() != self.pano_tab:
+            return
+        if not self.pano_request:
+            self.pano_view.set_data(None, None, [], 10, 1, True)
+            self.pano_shown = None
+            return
+        params, run_dir = self.pano_request
+        index = max(0, self.pano_tx.currentIndex())
+        site = params["tx_sites"][index]
+        radius = self.pano_radius.value()
+        key = (str(run_dir), index, radius)
+        if self.pano_shown == key:
+            return
+        hd = params["variant"] == "hd"
+        sdf_dirs = [str(run_dir), splat.effective_sdf_dir(params)]
+        if key not in self.pano_cache:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            try:
+                self.pano_cache[key] = panorama.sample(site, sdf_dirs, hd, radius)
+            except (OSError, ValueError, KeyError) as exc:
+                self.pano_hover.setText(tr("Panorama impossible : {exc}", exc=exc))
+                return
+            finally:
+                QApplication.restoreOverrideCursor()
+        others = [s for i, s in enumerate(params["tx_sites"]) if i != index]
+        if params["mode"] == "p2p":
+            others.append(params["rx_site"])
+        k = linkprofile._number(params, "m") or 1.0
+        self.pano_view.set_data(self.pano_cache[key], site, panorama.site_markers(site, others, sdf_dirs, hd),
+                                linkprofile.site_height_m(site), k, bool(params.get("metric", True)))
+        # Nouveau calcul ou autre émetteur (pas un simple changement de rayon) : vue centrée sur le récepteur
+        if params["mode"] == "p2p" and (self.pano_shown or (None, None))[:2] != key[:2]:
+            self._panorama_to_receiver()
+        self.pano_shown = key
+        self.pano_terrain = (sdf_dirs, hd)
+        self._show_panorama_places(key)
+        if self.pano_places_check.isChecked() and key not in self.pano_places:
+            self._load_panorama_places(key, site, radius, sdf_dirs, hd)
+        self._load_panorama_map(key)
+        self._load_panorama_drape()
+
+    def _load_panorama_drape(self):
+        """Carte plaquée sur le panorama affiché, construite en arrière-plan (tuiles en cache)."""
+        source, key = self.pano_drape.currentData(), self.pano_shown
+        if not source or key is None:
+            self.pano_view.set_texture(None)
+            return
+        if (key, source) in self.pano_textures:
+            self.pano_view.set_texture(self.pano_textures[(key, source)])
+            return
+        self.pano_view.set_texture(None)
+        data = self.pano_cache[key]
+        label = tr(basemap.SOURCES[source]["label"])
+
+        def done(colors):
+            self.pano_textures[(key, source)] = colors
+            if self.pano_shown == key and self.pano_drape.currentData() == source:
+                self.pano_view.set_texture(colors)
+            self.pano_hover.setText(tr("Placage : {source}", source=label))
+
+        self.pano_hover.setText(tr("Placage : chargement de {source}…", source=label))
+        self._run_task(("drape", key, source), lambda: panorama.drape_colors(data, source), done,
+                       lambda error: self.pano_hover.setText(tr("Placage indisponible : {error}", error=error)))
+
+    def _load_panorama_map(self, key):
+        """Carte physique sous le panorama : relief SDF sur tout le cadre, coins compris."""
+        if key in self.pano_map_layers:
+            self.pano_map.set_layers(self.pano_map_layers[key])
+            return
+        self.pano_map.set_layers(None)
+        site = self.pano_view.site
+        lat, lon = float(site["lat"]), float(site["lon"])
+        radius = float(self.pano_cache[key]["distance"][-1])
+        sdf_dirs, hd = self.pano_terrain
+
+        def done(layers):
+            self.pano_map_layers[key] = layers
+            if self.pano_shown == key:
+                self.pano_map.set_layers(layers)
+
+        self._run_task(("map_layers", key), lambda: panorama.map_layers(lat, lon, radius, sdf_dirs, hd), done,
+                       lambda error: self.pano_hover.setText(tr("Carte indisponible : {error}", error=error)))
+
+    def _panorama_drape_changed(self, _index):
+        self.settings["panorama_drape"] = self.pano_drape.currentData()
+        self._load_panorama_drape()
+
+    def _load_panorama_places(self, key, site, radius, sdf_dirs, hd):
+        """Localités autour du site, chargées en arrière-plan (téléchargement à la première fois)."""
+        def done(result):
+            places, source = result
+            self.pano_places[key] = places
+            if self.pano_shown == key:
+                self._show_panorama_places(key)
+            self.pano_hover.setText(tr("{n} localités ({source})", n=len(places), source=source))
+
+        self.pano_hover.setText(tr("Chargement des localités…"))
+        reach = radius * panorama.MAP_PLACES          # la carte montre aussi les localités des coins
+        self._run_task(("places", key), lambda: panorama.places_around(site, reach, sdf_dirs, hd), done,
+                       lambda error: self.pano_hover.setText(tr("Localités indisponibles : {error}", error=error)))
+
+    def _panorama_radius_changed(self, value):
+        self.settings["panorama_radius_km"] = value       # enregistré seulement quand on le change
+        self._update_panorama()
+
+    def _panorama_population_changed(self, _index):
+        value = self.pano_population.currentData()
+        self.settings["panorama_min_population"] = value
+        self.pano_view.set_min_population(value)
+
+    def _show_panorama_places(self, key):
+        """Localités dans le rayon sur le panorama, toutes (jusqu'aux coins) sur la carte."""
+        places = self.pano_places.get(key, [])
+        radius = float(self.pano_cache[key]["distance"][-1])
+        self.pano_view.set_places([p for p in places if p["distance"] <= radius])
+        self.pano_map.set_places(places)
+
+    def _panorama_places_toggled(self, checked):
+        self.settings["panorama_places"] = checked
+        self.pano_view.set_show_places(checked)
+        if checked and self.pano_request and self.pano_shown and self.pano_shown not in self.pano_places:
+            params, run_dir = self.pano_request
+            site = params["tx_sites"][max(0, self.pano_tx.currentIndex())]
+            self._load_panorama_places(self.pano_shown, site, self.pano_radius.value(),
+                                       [str(run_dir), splat.effective_sdf_dir(params)], params["variant"] == "hd")
+
+    def _panorama_palette_changed(self, _index):
+        self.settings["panorama_palette"] = self.pano_palette.currentData()
+        self.pano_view.set_palette(self.pano_palette.currentData())
+
+    def _panorama_gradient_changed(self, _index):
+        self.settings["panorama_gradient"] = self.pano_gradient.currentData()
+        self.pano_view.set_gradient_mode(self.pano_gradient.currentData())
+
+    def _panorama_contours_toggled(self, checked):
+        self.settings["panorama_contours"] = checked
+        self.pano_view.set_contours(checked)
+
+    def _panorama_horizon_toggled(self, checked):
+        self.settings["panorama_map_horizon"] = checked
+        self.pano_map.set_show_horizon(checked)
+
+    def _panorama_fov_changed(self, index):
+        if index < 0:                        # liste vidée par _panorama_fov_sync (zoom hors des choix)
+            return
+        self.settings["panorama_fov"] = self.pano_fov.itemData(index)
+        self.pano_view.set_fov(self.pano_fov.itemData(index))
+
+    def _panorama_fov_sync(self):
+        """Liste du champ de vision alignée sur la vue (molette, +/−, Origine) ; vide hors des choix."""
+        fov = self.pano_view.fov
+        index = self.pano_fov.findData(float(round(fov))) if abs(fov - round(fov)) < 1e-6 else -1
+        if index != self.pano_fov.currentIndex():
+            self.pano_fov.blockSignals(True)
+            self.pano_fov.setCurrentIndex(index)
+            self.pano_fov.blockSignals(False)
+
+    def _panorama_haze_changed(self, _index):
+        self.settings["panorama_haze"] = self.pano_haze.currentData()
+        self.pano_view.set_haze(self.pano_haze.currentData())
+
+    def _panorama_exaggeration_changed(self, _index):
+        factor = self.pano_exaggeration.currentData()
+        self.settings["panorama_exaggeration"] = factor
+        self.pano_view.set_exaggeration(factor)
+
+    def _panorama_to_receiver(self):
+        rx = self.pano_request[0]["rx_site"]["name"] if self.pano_request else None
+        target = next((m for m in self.pano_view.markers if m[0] == rx), None)
+        if target:
+            self.pano_view.center_on(target[1])
+
+    def _export_panorama(self):
+        if not self.pano_view.data:
+            return
+        name = splat.safe_filename(self.pano_view.site["name"])
+        default = str(Path(self.shown_dir or ".") / f"panorama_{name}.png")
+        path, _ = QFileDialog.getSaveFileName(self, tr("Exporter le panorama"), default, "PNG (*.png)")
+        if path:
+            self.pano_view.image().save(path)
 
     def _export_profile(self):
         if not self.profile_view.profile:
@@ -2963,6 +3375,46 @@ class MainWindow(QMainWindow):
         self.overlay_status.setText(tr("Préparation de la page web (relief SRTM, couverture, calques)…"))
         self._run_task(("web", str(run_dir)), build, done, lambda _e: self.browser_button.setEnabled(True))
 
+    def _export_kml(self):
+        if self.full_image is None or self.full_ref is None:
+            return
+        source = Path(self.image_combo.currentData())
+        path, chosen = QFileDialog.getSaveFileName(
+            self, tr("Exporter pour Google Earth"), str(source.with_suffix(".kmz")),
+            tr("Google Earth KMZ (*.kmz);;Google Earth KML (*.kml)"))
+        if not path:
+            return
+        if Path(path).suffix.lower() not in (".kmz", ".kml"):
+            path += ".kml" if "KML" in chosen else ".kmz"
+        names = sites.icon_names(self.current_sites, self.tx_icon.currentData(), self.rx_icon.currentData())             if self.sites_box.isChecked() else []
+        icon_files = [sites.ICONS_DIR / n if n else None for n in names]
+        site_list = self.current_sites if self.sites_box.isChecked() else []
+        coverage = self._live_coverage() if self.coverage_check.isChecked() else QImage(1, 1, QImage.Format.Format_ARGB32)
+        if not self.coverage_check.isChecked():
+            coverage.fill(QColor(0, 0, 0, 0))
+        entries = self._legend_entries(coverage, None, None, online=True) if self.legend_check.isChecked() else []
+        ref = self.full_ref
+        view_ref = self._content_ref() or ref
+        west, _south, east, north = view_ref.bounds()
+        pixel_m = (east - west) * 111320 * math.cos(math.radians(north)) / 2000
+        layer_specs = [(self.geo_layers[n]["label"], self._layer_color(n), self.geo_layers[n]["width"],
+                        layers.choose_level(self.geo_layers[n], pixel_m)) for n in self._checked_layers()]
+        opacity, title = self.coverage_opacity.value() / 100, f"SPLAT!Gui — {source.parent.name}"
+
+        def build():
+            vectors = [(label, color, width, layers.load(p)) for label, color, width, p in layer_specs]
+            return googleearth.export(path, coverage, ref, site_list, icon_files, entries, opacity, title,
+                                      vectors, view_ref)
+
+        def done(written):
+            self.kml_button.setEnabled(True)
+            self.overlay_status.setText(tr("Fichier Google Earth écrit : {path}", path=written))
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(written)))
+
+        self.kml_button.setEnabled(False)
+        self.overlay_status.setText(tr("Préparation de l'export Google Earth…"))
+        self._run_task(("kml", path), build, done, lambda _e: self.kml_button.setEnabled(True))
+
     def _toggle_crop(self):
         self._set_view_region()
         self._apply_overlay(refit=True)
@@ -3075,6 +3527,11 @@ class MainWindow(QMainWindow):
         self.export_button = QPushButton(tr("Exporter l'image…"))
         self.export_button.clicked.connect(self._export_overlay)
         row2.addWidget(self.export_button)
+        self.kml_button = QPushButton(tr("Google Earth…"))
+        self.kml_button.setToolTip(tr("Exporter la couverture, les sites, les calques et la légende "
+                                   "pour Google Earth (.kmz ou .kml)"))
+        self.kml_button.clicked.connect(self._export_kml)
+        row2.addWidget(self.kml_button)
         self.relief_source.currentIndexChanged.connect(lambda _i: self._overlay_timer.start())
         self.relief_opacity.valueChanged.connect(lambda _v: self._overlay_timer.start())
         self.display_mode.currentIndexChanged.connect(self._display_mode_changed)

@@ -371,7 +371,8 @@ class LiveMap(SlippyMap):
         painter.fillRect(self.rect(), QColor(255, 255, 255))
         if self.base:
             painter.setOpacity(self.base_opacity)
-            self._draw_tiles(painter, self.base)
+            # Source limitée en zoom (carte physique IGN : 14) : tuiles du dernier niveau agrandies.
+            self._draw_tiles(painter, self.base, min(self.zoom, basemap.SOURCES.get(self.base, {}).get("max_zoom", 18)))
         relief = self.relief
         if relief == "srtm" and self.zoom < SRTM_MIN_ZOOM:
             relief = ""

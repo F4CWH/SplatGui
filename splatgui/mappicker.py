@@ -223,16 +223,18 @@ class SlippyMap(QWidget):
         return QPointF(x - self.cx + self.width() / 2, y - self.cy + self.height() / 2)
 
     def _draw_tiles(self, painter, source=None, zoom=None):
-        """Dessine les tuiles visibles d'une source (en attendant : tuile parente agrandie)."""
-        zoom = self.zoom if zoom is None else zoom
+        """Dessine les tuiles visibles d'une source (en attendant : tuile parente agrandie).
+        `zoom` inférieur au zoom de la vue : tuiles de ce niveau agrandies (source limitée en zoom)."""
+        zoom = self.zoom if zoom is None else min(zoom, self.zoom)
+        size = TILE * 2 ** (self.zoom - zoom)          # taille d'une tuile à l'écran
         left = self.cx - self.width() / 2
         top = self.cy - self.height() / 2
         n = 2 ** zoom
-        for ty in range(int(math.floor(top / TILE)), int(math.floor((top + self.height()) / TILE)) + 1):
+        for ty in range(int(math.floor(top / size)), int(math.floor((top + self.height()) / size)) + 1):
             if not 0 <= ty < n:
                 continue
-            for tx in range(int(math.floor(left / TILE)), int(math.floor((left + self.width()) / TILE)) + 1):
-                target = QRectF(tx * TILE - left, ty * TILE - top, TILE, TILE)
+            for tx in range(int(math.floor(left / size)), int(math.floor((left + self.width()) / size)) + 1):
+                target = QRectF(tx * size - left, ty * size - top, size, size)
                 pixmap = self._tile(zoom, tx, ty, source)
                 if pixmap is not None:
                     painter.drawPixmap(target, pixmap, QRectF(0, 0, pixmap.width(), pixmap.height()))

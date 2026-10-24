@@ -21,9 +21,9 @@ from .i18n import N_, tr
 ARCHES = {"x64": N_("x64 (64 bits)"), "x86": N_("x86 (32 bits)")}
 VARIANTS = {"standard": N_("Standard (3\" d'arc)"), "hd": N_("HD (1\" d'arc)")}
 MODES = {
-    "p2p": N_("Point à point"),
-    "coverage": N_("Couverture LOS (-c)"),
-    "pathloss": N_("Perte de trajet / champ (-L)"),
+    "p2p": N_("Liaison point à point"),
+    "coverage": N_("Couverture visuelle (LOS) (-c)"),
+    "pathloss": N_("Couverture régionale / Champ (-L)"),
 }
 CLIMATES = {
     1: N_("1 – Équatorial"),

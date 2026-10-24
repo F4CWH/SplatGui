@@ -12,10 +12,10 @@ Code source : <https://github.com/F4CWH/SplatGui>
 
 ## Fonctionnalités
 
-- **Modes d'analyse** : point à point (`-t` / `-r`), couverture en visibilité (`-c`), perte de trajet et champ (`-L`), jusqu'à 30 émetteurs ; versions x64 / x86, standard et HD.
-- **Sites** : tableau des émetteurs, récepteur, import / export `.qth`, coordonnées décimales ou en degrés-minutes-secondes, placement sur une carte OSM / IGN avec recherche d'adresse.
+- **Modes d'analyse** : liaison point à point (`-t` / `-r`), couverture visuelle (LOS, `-c`), couverture régionale / champ (`-L`), jusqu'à 30 émetteurs ; versions x64 / x86, standard et HD.
+- **Sites** : tableau des émetteurs, récepteur, import / export `.qth`, coordonnées décimales ou en degrés-minutes-secondes, placement sur une carte OSM / IGN (plan, photographies aériennes, carte physique du relief) avec recherche d'adresse.
 - **Antennes** :
-  - bibliothèque de diagrammes de rayonnement (MSI / Planet, sortie NEC-2 / 4nec2, EZNEC, SPLAT! `.az` / `.el`, texte / CSV) ;
+  - bibliothèque de diagrammes de rayonnement (MSI / Planet, NSMA / TIA-804 `.adf`, sortie NEC-2 / 4nec2, EZNEC, SPLAT! `.az` / `.el`, texte / CSV) ;
   - pour chaque émetteur : modèle, azimut, inclinaison et diagrammes orientés.
 - **Calcul de la PAR** :
   - puissance, câble coaxial (RG-58, RG-213, H155, Aircell 7, Ecoflex, LMR…, affaiblissement interpolé à la fréquence de calcul) ou valeur personnalisée, longueur, pertes additionnelles ;
@@ -27,11 +27,16 @@ Code source : <https://github.com/F4CWH/SplatGui>
   - trois sources au choix : SRTM, Copernicus GLO-30 (mondial, plus récent) ou IGN RGE ALTO (France, sol nu, complété par Copernicus hors de France) ;
   - conversion de ses propres tuiles DTED (.dt0, .dt1, .dt2 ; fichiers ou dossier entier) en SDF standard ou HD ;
   - sursol facultatif (arbres, bâti, arbustes) d'après l'occupation du sol ESA WorldCover, retiré à l'emplacement des sites pour que les hauteurs d'antenne restent comptées depuis le sol.
-- **Profil de liaison** (point à point) : relief, courbure terrestre, ligne de visée, première zone de Fresnel et 60 %, dégagement et obstacles, tracés par l'application (valeurs au survol, export PNG).
+- **Profil de liaison** (liaison point à point) : relief, courbure terrestre, ligne de visée, première zone de Fresnel et 60 %, dégagement et obstacles, pylônes des antennes, tracés par l'application ; fiches de synthèse du rapport SPLAT! (valeurs au survol, export PNG).
+- **Panorama** : relief à 360° vu depuis un émetteur, à la hauteur de son antenne (courbure terrestre et facteur k) :
+  - champ de vision de 90° à 360° (liste ou molette), rotation à la souris ou au clavier, exagération du relief ;
+  - carte plaquée sur le relief ou dégradés de couleurs selon l'altitude ou la distance, courbes de niveau, brume ;
+  - noms des localités (OpenStreetMap, mis en cache) ;
+  - carte orientée sous le panorama, synchronisée avec la vue, ligne d'horizon facultative ; export PNG.
 - **Cartes** :
   - image composée (fond de carte, ombrage du relief, couverture, calques GeoJSON, icônes des sites, légende, échelle, nord, proportions corrigées) ;
   - ou carte en ligne interactive ;
-  - export PNG / PPM géoréférencé ou en page web Leaflet.
+  - export PNG / PPM géoréférencé, en page web Leaflet ou pour Google Earth (`.kmz` / `.kml` : couverture, sites, calques et légende).
 - **Profils et historique** : paramètres enregistrés par profil, historique des calculs rechargeable.
 - **Interface** : français, anglais et espagnol ; thèmes Système, Clair, Sombre, Bleu nuit, Sépia et Contraste élevé.
 - **Pré-requis** : vérification à chaque démarrage. Téléchargement des DLL nécessaires à SPLAT! (MSYS2 pour x64, MinGW pour x86) et de gnuplot, et installation des exécutables SPLAT! depuis une archive, locale ou en ligne.

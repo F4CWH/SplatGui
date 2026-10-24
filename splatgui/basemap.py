@@ -10,6 +10,7 @@ Tuiles en cache dans terrain/tiles/<source>/<z>/<x>/<y>.<ext>.
 import math
 import re
 import urllib.error
+import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -48,6 +49,12 @@ SOURCES = {
         "url": _IGN.replace("{layer}", "ORTHOIMAGERY.ORTHOPHOTOS").replace("{fmt}", "image/jpeg"),
         "ext": "jpg", "max_zoom": 18, "workers": 6,
         "attribution": N_("© IGN – Géoplateforme, BD ORTHO®"),
+    },
+    "ign_physique": {
+        "label": N_("IGN – Carte physique (relief)"),
+        "url": _IGN.replace("{layer}", "ELEVATION.SLOPES").replace("{fmt}", "image/jpeg"),
+        "ext": "jpg", "max_zoom": 14, "workers": 6,
+        "attribution": N_("© IGN – Géoplateforme, relief (BD ALTI®)"),
     },
     "opentopo": {
         "label": N_("OpenTopoMap (OSM + relief)"),
@@ -239,10 +246,10 @@ def download_tile(source_key, z, x, y, cancel=lambda: False):
     return path
 
 
-def build_basemap(source_key, ref, log=lambda _m: None, cancel=lambda: False):
+def build_basemap(source_key, ref, log=lambda _m: None, cancel=lambda: False, max_tiles=MAX_TILES):
     """Fond de carte reprojeté sur la grille de la carte SPLAT! (QImage ARGB32)."""
     source = SOURCES[source_key]
-    z = choose_zoom(ref, source["max_zoom"])
+    z = choose_zoom(ref, source["max_zoom"], max_tiles)
     x0, x1, y0, y1 = tile_range(ref, z)
     coords = [(x, y) for y in range(y0, y1 + 1) for x in range(x0, x1 + 1)]
     log(tr("{source} : zoom {z}, {n} tuile(s)", source=tr(source["label"]), z=z, n=len(coords)))
@@ -264,6 +271,19 @@ def build_basemap(source_key, ref, log=lambda _m: None, cancel=lambda: False):
             for future in futures:
                 future.cancel()
             raise
+    # Tuiles en erreur (délai dépassé, serveur saturé…) : deux nouvelles tentatives, une à une
+    for attempt in range(2):
+        failed = [xy for xy, path in paths.items() if path is None and not _tile_path(source_key, z, *xy)
+                  .with_suffix(".absent").exists()]
+        if not failed or not errors:
+            break
+        errors = []
+        time.sleep(1.0 + attempt)
+        for x, y in failed:
+            try:
+                paths[(x, y)] = download_tile(source_key, z, x, y, cancel)
+            except (OSError, urllib.error.URLError) as exc:
+                errors.append(exc)
 
     mosaic = QImage((x1 - x0 + 1) * TILE, (y1 - y0 + 1) * TILE, QImage.Format.Format_ARGB32_Premultiplied)
     mosaic.fill(QColor(0, 0, 0, 0))

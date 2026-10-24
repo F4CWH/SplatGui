@@ -94,13 +94,19 @@ class PatternPlot(QWidget):
                 point = QPointF(cx + r * math.sin(rad), cy - r * math.cos(rad))
                 path.moveTo(point) if i == 0 else path.lineTo(point)
         else:
-            if not self.pattern.get("el"):
+            full = antennas.el_full_curve(self.pattern)
+            if not self.pattern.get("el") and full is None:
                 painter.setPen(QColor(120, 120, 120))
                 painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, tr("isotrope\n(aucune donnée)"))
                 return
-            angles, values = antennas.el_curve(self.pattern)
-            fine = np.linspace(angles.min(), angles.max(), 721)
-            interp = np.interp(fine, angles, values)
+            if full is not None:     # coupe complète : avant (à droite) et arrière (à gauche), refermée
+                angles, values = full
+                fine = np.linspace(-180, 180, 1441)
+                interp = np.interp(fine, angles, values, period=360)
+            else:
+                angles, values = antennas.el_curve(self.pattern)
+                fine = np.linspace(angles.min(), angles.max(), 721)
+                interp = np.interp(fine, angles, values)
             for i, (elev, db) in enumerate(zip(fine, interp)):
                 rad = math.radians(elev - self.rotation)   # 0 = horizon (à droite), +90 = haut
                 r = self._radius(db, r_max)

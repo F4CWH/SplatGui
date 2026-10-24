@@ -6,10 +6,14 @@ Représentation interne d'un diagramme (indépendante du format d'origine) :
   dans le sens horaire (vu de dessus) depuis la direction du lobe principal ;
 - `el` : liste [(élévation, dB relatifs)], élévation en degrés AU-DESSUS de l'horizon
   (positive vers le ciel, négative vers le sol), de -90 à +90, dans la direction du lobe ;
+- `el_full` (facultatif) : coupe verticale complète [(angle, dB relatifs)], angle de -180 à
+  +180 : 0 = horizon devant, +90 = zénith, ±180 = horizon derrière, -90 = nadir. Sert à
+  l'affichage ; SPLAT! n'utilise que la moitié avant (`el`) ;
 - `gain_dbi` : gain maximal (dBi) si connu, `frequency_mhz` si connue.
 
 Formats reconnus :
 - MSI / Planet (.msi, .pln, .txt…) : fabricants d'antennes (Kathrein, CommScope, RFS…) ;
+- NSMA WG16.99.050 / TIA-804 (.adf) : fabricants, CloudRF, Pathloss ;
 - sortie NEC-2 (.out, .nou) : 4nec2, nec2c, xnec2c, NEC-4 (tableau « RADIATION PATTERNS ») ;
 - tableau de champ lointain d'EZNEC (« FF Tab », diagramme azimutal ou d'élévation) ;
 - fichiers SPLAT! .az / .el ;
@@ -37,8 +41,8 @@ SOURCES_DIR = LIBRARY_DIR / "sources"
 FLOOR_DB = -60.0          # plancher (au-delà : considéré comme nul)
 DBD_TO_DBI = 2.15
 
-FILE_FILTER = N_("Diagrammes d'antenne (*.msi *.pln *.ant *.out *.nou *.txt *.csv *.dat *.az *.el);;"
-               "MSI / Planet (*.msi *.pln *.ant *.txt);;Sortie NEC-2 / 4nec2 (*.out *.nou);;"
+FILE_FILTER = N_("Diagrammes d'antenne (*.msi *.pln *.ant *.adf *.out *.nou *.txt *.csv *.dat *.az *.el);;"
+               "MSI / Planet (*.msi *.pln *.ant *.txt);;NSMA / TIA-804 (*.adf);;Sortie NEC-2 / 4nec2 (*.out *.nou);;"
                "EZNEC FF Tab (*.txt *.dat);;SPLAT! (*.az *.el);;Texte / CSV (*.txt *.csv *.dat);;"
                "Tous les fichiers (*)")
 
@@ -81,14 +85,24 @@ def make_pattern(name, az_angles=None, az_db=None, el_angles=None, el_db=None, *
         pattern["az_reference"] = float(peak)        # direction du lobe dans le repère d'origine
         pattern["az"] = [round(float(v), 3) for v in _clean_db(np.roll(az, -peak))]
     if el_angles is not None and len(el_angles):
-        el_angles = np.asarray(el_angles, dtype=float)
-        keep = (el_angles >= -90) & (el_angles <= 90)
-        el_angles, el_values = el_angles[keep], np.asarray(el_db, dtype=float)[keep]
-        order = np.argsort(el_angles)
-        el_angles, unique = np.unique(el_angles[order], return_index=True)
-        values = _clean_db(el_values[order][unique])
-        pattern["el"] = [[round(float(a), 3), round(float(v), 3)] for a, v in zip(el_angles, values)]
-    if pattern["az"] is None and pattern["el"] is None:
+        # Angles ramenés dans ]-180, 180] : la moitié avant (|angle| ≤ 90) est l'élévation.
+        all_angles = 180 - np.mod(180 - np.asarray(el_angles, dtype=float), 360)
+        all_values = np.asarray(el_db, dtype=float)
+        order = np.argsort(all_angles)
+        all_angles, unique = np.unique(all_angles[order], return_index=True)
+        all_values = all_values[order][unique]
+        keep = (all_angles >= -90) & (all_angles <= 90)
+        if keep.any():
+            reference = float(np.max(all_values[keep]))
+            values = _clean_db(all_values[keep])
+            pattern["el"] = [[round(float(a), 3), round(float(v), 3)] for a, v in zip(all_angles[keep], values)]
+        else:
+            reference = float(np.max(all_values))
+        if np.any(np.abs(all_angles) > 90):
+            # Même référence que la moitié avant (un lobe arrière peut dépasser 0 dB).
+            full = np.maximum(np.where(np.isfinite(all_values), all_values, -1e9) - reference, FLOOR_DB)
+            pattern["el_full"] = [[round(float(a), 3), round(float(v), 3)] for a, v in zip(all_angles, full)]
+    if pattern["az"] is None and pattern["el"] is None and not pattern.get("el_full"):
         raise PatternError(tr("aucune donnée de diagramme"))
     return pattern
 
@@ -111,6 +125,15 @@ def el_curve(pattern):
         data = np.asarray(pattern["el"], dtype=float)
         return data[:, 0], data[:, 1]
     return np.array([-90.0, 90.0]), np.array([0.0, 0.0])
+
+
+def el_full_curve(pattern):
+    """(angles de -180 à 180, dB) de la coupe verticale complète, ou None si seule la moitié
+    avant est connue."""
+    if pattern.get("el_full"):
+        data = np.asarray(pattern["el_full"], dtype=float)
+        return data[:, 0], data[:, 1]
+    return None
 
 
 def el_value(pattern, elevation):
@@ -213,11 +236,93 @@ def parse_msi(text, name):
         az_angles, az_db = -h[:, 0], -h[:, 1]          # antihoraire -> horaire ; atténuation -> dB
     if vertical:
         v = np.asarray(vertical)
-        angle = np.mod(v[:, 0], 360)
-        front = (angle <= 90) | (angle >= 270)
-        elev = np.where(angle <= 90, -angle, 360 - angle)
-        el_angles, el_db = elev[front], -v[front, 1]
+        el_angles, el_db = -v[:, 0], -v[:, 1]          # vers le sol -> vers le ciel ; atténuation -> dB
     return [make_pattern(name, az_angles, az_db, el_angles, el_db, gain_dbi=gain, **meta)]
+
+
+def parse_adf(text, name):
+    """NSMA WG16.99.050 / TIA-804 (« ADF ») : en-tête « CLÉ:,valeur », puis pour chaque
+    fréquence (PATFRE) des coupes (PATCUT H / V / AZ / EL) suivies de lignes « angle,valeur ».
+    Coupe horizontale : angle croissant de la gauche (-180) vers la droite en passant par le
+    lobe (0), donc sens horaire vu de dessus ; coupe verticale : angle positif au-dessus de
+    l'axe. Les coupes EL sont centrées sur le lobe électrique, abaissé de ELTILT degrés.
+    Un diagramme par fréquence, en polarisation principale (copolaire)."""
+    header, frequencies = {}, []
+    current_freq, cut = None, None
+    for raw in text.splitlines():
+        line = raw.split("!")[0].strip()
+        if not line:
+            continue
+        match = re.match(r"([A-Za-z0-9]{6}):\s*,?(.*)$", line)
+        if match:
+            key, value = match.group(1).upper(), match.group(2).strip().rstrip(",").strip()
+            if key == "PATFRE":
+                current_freq = {"frequency": (_floats(value) or [None])[0], "cuts": []}
+                frequencies.append(current_freq)
+            elif key == "PATCUT":
+                if current_freq is None:
+                    current_freq = {"frequency": None, "cuts": []}
+                    frequencies.append(current_freq)
+                cut = {"type": value.upper(), "polar": "", "points": []}
+                current_freq["cuts"].append(cut)
+            elif key == "POLARI" and cut is not None:
+                cut["polar"] = value.upper().replace(" ", "")
+            elif key == "ENDFIL":
+                break
+            elif cut is None:
+                header[key] = value
+            continue
+        values = _floats(line)
+        if cut is not None and len(values) >= 2:
+            cut["points"].append(values[:2])
+    if not any(c["points"] for f in frequencies for c in f["cuts"]):
+        raise PatternError(tr("aucune coupe de diagramme (PATCUT) trouvée"))
+    units = header.get("GUNITS", "DBI/DBR").upper().replace(" ", "")
+    gain_unit, _, data_unit = units.partition("/")
+    first = lambda key: (_floats(header.get(key, "")) or [None])[0]
+    gain = first("MDGAIN")
+    if gain is not None and gain_unit.startswith("DBD"):
+        gain += DBD_TO_DBI
+    tilt = first("ELTILT") or 0.0
+    title = " ".join(header[k] for k in ("ANTMAN", "MODNUM") if header.get(k)) or name
+    comment = " ".join(header[k] for k in sorted(header) if k.startswith("COMNT") and header[k])
+    low, high = first("LOWFRQ"), first("HGHFRQ")
+    patterns = []
+    for freq in frequencies:
+        cuts = [c for c in freq["cuts"] if len(c["points"]) >= 2]
+        # Polarisation principale : la première copolaire (V/V, H/H…), sinon la première trouvée.
+        copolar = [c["polar"] for c in cuts if "/" in c["polar"] and len(set(c["polar"].split("/"))) == 1]
+        polar = copolar[0] if copolar else (cuts[0]["polar"] if cuts else "")
+        chosen = {}
+        for c in cuts:
+            plane = {"H": "h", "AZ": "h", "V": "v", "EL": "v"}.get(c["type"])
+            if plane and plane not in chosen and c["polar"] == polar:
+                chosen[plane] = c
+        if not chosen:
+            continue
+        az_angles = az_db = el_angles = el_db = None
+        cut_gain = gain
+        for plane, c in chosen.items():
+            data = np.asarray(c["points"], dtype=float)
+            if data_unit.startswith("LIN"):
+                db = _to_db(data[:, 1], "lin")
+            else:
+                db = data[:, 1]
+                if data_unit.startswith(("DBI", "DBD")) and cut_gain is None:
+                    cut_gain = float(db.max()) + (DBD_TO_DBI if data_unit.startswith("DBD") else 0.0)
+            if plane == "h":
+                az_angles, az_db = data[:, 0], db
+            else:
+                angle = (data[:, 0] + 180) % 360 - 180
+                el_angles, el_db = angle - (tilt if c["type"] == "EL" else 0.0), db
+        frequency = freq["frequency"] or (round((low + high) / 2, 3) if low and high else low or high)
+        label = title if len(frequencies) == 1 or not frequency else f"{title} {frequency:g} MHz"
+        patterns.append(make_pattern(label, az_angles, az_db, el_angles, el_db, gain_dbi=cut_gain,
+                                     frequency_mhz=frequency, comment=comment,
+                                     source_format=f"NSMA / TIA-804 ({polar})" if polar else "NSMA / TIA-804"))
+    if not patterns:
+        raise PatternError(tr("aucune coupe horizontale ou verticale exploitable"))
+    return patterns
 
 
 def parse_nec(text, name):
@@ -260,12 +365,14 @@ def parse_nec(text, name):
             az_angles = az_db = None
             if np.unique(np.round(phi[az_sel], 3)).size >= 3:
                 az_angles, az_db = phi_max - phi[az_sel], total[az_sel]   # antihoraire -> horaire
-            # Élévation dans la direction du lobe ; THETA négatif = côté opposé.
-            front = valid & (((np.isclose(phi, phi_max)) & (theta >= 0)) |
-                             ((np.isclose(np.mod(phi - phi_max, 360), 180)) & (theta < 0)))
+            # Coupe verticale par le lobe (PHI = lobe ou opposé) ; THETA négatif = côté opposé.
+            same = np.isclose(phi, phi_max)
+            plane = valid & (same | np.isclose(np.mod(phi - phi_max, 360), 180))
+            front = same != (theta < 0)
             el_angles = el_db = None
-            if np.count_nonzero(front) >= 3:
-                el_angles, el_db = 90 - np.abs(theta[front]), total[front]
+            if np.count_nonzero(plane & front) >= 3:
+                angle = np.where(front, 90 - np.abs(theta), 90 + np.abs(theta))
+                el_angles, el_db = angle[plane], total[plane]
             label = name if frequency is None else f"{name} ({frequency:g} MHz)"
             try:
                 patterns.append(make_pattern(label, az_angles, az_db, el_angles, el_db,
@@ -321,10 +428,7 @@ def parse_eznec(text, name):
     meta = dict(gain_dbi=peak, frequency_mhz=frequency, source_format=N_("EZNEC (azimut)") if kind == "az" else N_("EZNEC (élévation)"))
     if kind == "az":
         return [make_pattern(name, -angles, total, **meta)]
-    a = np.mod(angles, 360)
-    front = (a <= 90) | (a >= 270)
-    elev = np.where(a <= 90, a, a - 360)
-    return [make_pattern(name, el_angles=elev[front], el_db=total[front], **meta)]
+    return [make_pattern(name, el_angles=angles, el_db=total, **meta)]
 
 
 def _to_db(values, mode="auto"):
@@ -383,6 +487,8 @@ def detect_format(path, text):
         return "splat_az"
     if suffix == ".el":
         return "splat_el"
+    if re.search(r"^\s*(REVNUM|PATCUT|NUMCUT|FSTLST):", text, re.IGNORECASE | re.MULTILINE):
+        return "adf"
     if "RADIATION PATTERNS" in upper and "THETA" in upper:
         return "nec"
     if re.search(r"^\s*HORIZONTAL\s+\d+", text, re.IGNORECASE | re.MULTILINE) or \
@@ -393,7 +499,7 @@ def detect_format(path, text):
     return "generic"
 
 
-FORMAT_LABELS = {"msi": "MSI / Planet", "nec": "Sortie NEC-2 / 4nec2", "eznec": "EZNEC (FF Tab)",
+FORMAT_LABELS = {"msi": "MSI / Planet", "adf": "NSMA / TIA-804 (ADF)", "nec": "Sortie NEC-2 / 4nec2", "eznec": "EZNEC (FF Tab)",
                  "splat_az": "SPLAT! .az", "splat_el": "SPLAT! .el", "generic": "Texte / CSV"}
 
 
@@ -404,6 +510,8 @@ def import_file(path, generic_options=None):
     fmt = detect_format(path, text)
     if fmt == "msi":
         patterns = parse_msi(text, name)
+    elif fmt == "adf":
+        patterns = parse_adf(text, name)
     elif fmt == "nec":
         patterns = parse_nec(text, name)
     elif fmt == "eznec":
@@ -422,6 +530,8 @@ def merge(base, other):
     for key in ("az", "el"):
         if other.get(key):
             base[key] = other[key]
+            if key == "el":
+                base["el_full"] = other.get("el_full")
     for key in ("gain_dbi", "frequency_mhz"):
         if base.get(key) is None and other.get(key) is not None:
             base[key] = other[key]
