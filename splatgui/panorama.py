@@ -332,6 +332,7 @@ class PanoramaView(QWidget):
 
     hovered = pyqtSignal(str)
     repainted = pyqtSignal()       # vue redessinée (orientation, champ, curseur…) : carte à synchroniser
+    oriented = pyqtSignal()        # orientation ou champ changés par programme ou depuis la carte (vue 3D)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -536,10 +537,12 @@ class PanoramaView(QWidget):
     def set_fov(self, fov):
         self.fov = min(360.0, max(MIN_FOV, float(fov)))
         self.update()
+        self.oriented.emit()
 
     def center_on(self, azimuth):
         self.center = azimuth % 360
         self.update()
+        self.oriented.emit()
 
     def marker_angles(self):
         """Angle de site de chaque repère pour la hauteur d'observation courante."""
@@ -904,8 +907,6 @@ class PanoramaView(QWidget):
         Priorité de placement : repères (`placed`, déjà occupés), puis villes, bourgs et villages,
         les plus proches d'abord."""
         eye = self.data["site_ground"] + self.height_m
-        text = self.palette().color(QPalette.ColorRole.Text)
-        ink = _mix(text, base, 0.35)             # pointillés et pieds
         candidates = sorted((p for p in self.places if population(p) >= self.min_population),
                             key=lambda p: (p["rank"], -population(p), p["distance"]))
         placed = list(placed)
@@ -930,6 +931,13 @@ class PanoramaView(QWidget):
             box, foot_y, hidden = layout
             placed.append(box)
             signs.append((distance, t, x, box, font, fm, pad, name, hidden, foot_y))
+        self._paint_place_signs(painter, signs, base, lh)
+
+    def _paint_place_signs(self, painter, signs, base, lh):
+        """Dessine les étiquettes placées [(distance, t, x, cadre, police, métriques, marge, nom,
+        masqué, pied)], les plus proches par-dessus (aussi pour la vue 3D)."""
+        text = self.palette().color(QPalette.ColorRole.Text)
+        ink = _mix(text, base, 0.35)             # pointillés et pieds
         for distance, t, x, box, font, fm, pad, name, hidden, foot_y in sorted(signs, key=lambda s: -s[0]):
             painter.setOpacity(1.0 - self.FADE * t)
             self._draw_mast(painter, x, box, foot_y, ink, hidden, t, lh)
@@ -1481,6 +1489,7 @@ class PanoramaMap(QWidget):
             v.center = (center0 + rel0 - rel) % 360
             v._drag = (0.0, v.center)          # placage allégé pendant la rotation
             self._moved = True
+            v.oriented.emit()
         if hit is None:
             self.leaveEvent(None)
             return

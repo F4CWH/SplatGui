@@ -27,17 +27,22 @@ Code source : <https://github.com/F4CWH/SplatGui>
   - trois sources au choix : SRTM, Copernicus GLO-30 (mondial, plus récent) ou IGN RGE ALTO (France, sol nu, complété par Copernicus hors de France) ;
   - import de ses propres modèles de terrain (fichiers ou dossier entier) en SDF standard ou HD :
     - tuiles DTED (.dt0, .dt1, .dt2) ;
-    - GeoTIFF (.tif) et ESRI ASCII Grid (.asc), par exemple les dalles IGN RGE ALTO / BD ALTI, en lon/lat, Lambert 93, CC42 à CC50 ou UTM (reprojection intégrée, système lu dans le GeoTIFF ou le .prj) ; dalles assemblées en tuiles SDF, complétées hors des fichiers par le SDF existant ou Copernicus ;
-    - en ligne de commande : `tools/dt2sdf.py` (DTED) et `tools/dem2sdf.py` (GeoTIFF / ASCII Grid) ;
+    - GeoTIFF (.tif) et ESRI ASCII Grid (.asc), par exemple les dalles IGN RGE ALTO / BD ALTI, EU-DEM ou swissALTI3D, en lon/lat, Lambert 93, CC42 à CC50, UTM, LAEA Europe, NTF Lambert I à IV (zones ou cartographiques dont le II étendu), Lambert belge 72 / 2008 ou suisse LV03 / LV95 (reprojection intégrée, système lu dans le GeoTIFF ou le .prj) ; dalles assemblées en tuiles SDF, complétées hors des fichiers par le SDF existant ou Copernicus ;
+    - grilles Surfer (.grd : ASCII DSAA, binaires Surfer 6 DSBB et Surfer 7 DSRB), mêmes systèmes que l'ASCII Grid ;
+    - grilles binaires avec en-tête .hdr : BIL / BIP / BSQ d'ESRI (GTOPO30, SRTM30, exports ArcGIS ; calage par ULXMAP / ULYMAP ou fichier .blw), grille flottante ESRI (.flt) et image ENVI (.img, map info ou WKT de l'en-tête) ;
+    - semis de points XYZ en grille régulière (.xyz, .csv, .txt : « x y z » ou « lon lat z », séparateurs espace, tabulation, virgule ou point-virgule), mêmes systèmes que l'ASCII Grid ;
+    - tuiles SRTM (N48E002.hgt, .hgt.gz ou .zip, 1" ou 3"), position lue dans le nom du fichier ;
+    - en ligne de commande : `tools/dt2sdf.py` (DTED) et `tools/dem2sdf.py` (GeoTIFF / ASCII Grid / Surfer / BIL / XYZ / SRTM) ;
   - sursol facultatif (arbres, bâti, arbustes) d'après l'occupation du sol ESA WorldCover, retiré à l'emplacement des sites pour que les hauteurs d'antenne restent comptées depuis le sol.
 - **Profil de liaison** (liaison point à point) : relief, courbure terrestre, ligne de visée, première zone de Fresnel et 60 %, dégagement et obstacles, pylônes des antennes, tracés par l'application ; fiches de synthèse du rapport SPLAT! (valeurs au survol, export PNG).
 - **Panorama** : relief à 360° vu depuis un émetteur, à la hauteur de son antenne (courbure terrestre et facteur k) :
   - champ de vision de 90° à 360° (liste ou molette), rotation à la souris ou au clavier, exagération du relief ;
   - carte plaquée sur le relief ou dégradés de couleurs selon l'altitude ou la distance, courbes de niveau, brume ;
   - noms des localités (OpenStreetMap, mis en cache) ;
-  - carte orientée sous le panorama, synchronisée avec la vue, ligne d'horizon facultative ; export PNG.
+  - carte orientée sous le panorama, synchronisée avec la vue, ligne d'horizon facultative ; export PNG ;
+  - rendu 3D facultatif (Qt Quick 3D, carte graphique Direct3D 11) : relief maillé autour du site avec la couverture radio de SPLAT! plaquée, vu depuis l'antenne (rotation, angle de vue, zoom jusqu'à 120°, graduations des angles de site et des azimuts, horizontale de l'observateur et flèche de l'azimut visé comme en 2D) ou en orbite autour du site (vue d'ensemble, distance et inclinaison réglables) ; carte plaquée (IGN, OpenTopoMap, OSM, plus détaillée près du site) ou dégradé d'altitude, noms des localités (mêmes réglages que le panorama 2D), repères des autres sites avec le mât de leur antenne (vert si visible depuis le site, rouge si masqué), brume et exagération du relief ; retour automatique au rendu 2D si la 3D n'est pas disponible.
 - **Cartes** :
-  - image composée (fond de carte, ombrage du relief, couverture, calques GeoJSON, icônes des sites, légende, échelle, nord, proportions corrigées) ;
+  - image composée (fond de carte, ombrage du relief, couverture, courbes de niveau IGN facultatives au-dessus de la couverture, calques GeoJSON, icônes des sites, légende, échelle, nord, proportions corrigées) ;
   - ou carte en ligne interactive ;
   - export PNG / PPM géoréférencé, en page web Leaflet ou pour Google Earth (`.kmz` / `.kml` : couverture, sites, calques et légende).
 - **Profils et historique** : paramètres enregistrés par profil, historique des calculs rechargeable.

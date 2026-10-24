@@ -70,6 +70,13 @@ SOURCES = {
         "ext": "png", "max_zoom": 18, "workers": 6, "relief_only": True,
         "attribution": N_("© IGN – Géoplateforme, estompage"),
     },
+    # Courbes de niveau (fond transparent), surcouche au-dessus de la couverture : pas un fond.
+    "ign_courbes": {
+        "label": N_("IGN – Courbes de niveau"),
+        "url": _IGN.replace("{layer}", "ELEVATION.CONTOUR.LINE").replace("{fmt}", "image/png"),
+        "ext": "png", "max_zoom": 18, "workers": 6, "relief_only": True,
+        "attribution": N_("© IGN – Géoplateforme, courbes de niveau"),
+    },
 }
 
 

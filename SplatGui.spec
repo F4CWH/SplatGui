@@ -22,6 +22,40 @@ a = Analysis(
     excludes=["tkinter"],
     noarchive=False,
 )
+
+# Panorama 3D (Qt Quick 3D) : les hooks QML embarquent tous les modules QML de PyQt6 (Controls,
+# Multimedia, Pdf, Physics…). Seuls QtQml, QtQuick et QtQuick3D (sans leurs sous-modules) sont
+# gardés, puis les DLL de Qt qu'aucun fichier restant n'utilise sont retirées.
+from PyInstaller.depend import bindepend
+
+QML_DIR = "PyQt6/Qt6/qml/"
+QML_KEEP = ("QtQml/", "QtQuick/qmldir", "QtQuick/plugins.qmltypes", "QtQuick/qtquick2plugin.dll",
+            "QtQuick3D/qmldir", "QtQuick3D/Quick3D.qmltypes", "QtQuick3D/qquick3dplugin.dll")
+QT_BIN = "PyQt6/Qt6/bin/"
+
+
+def _dest(entry):
+    return entry[0].replace("\\", "/")
+
+
+def _keep_qml(entry):
+    dest = _dest(entry)
+    return not dest.startswith(QML_DIR) or dest[len(QML_DIR):].startswith(QML_KEEP)
+
+
+a.datas = [e for e in a.datas if _keep_qml(e)]
+a.binaries = [e for e in a.binaries if _keep_qml(e)]
+qt_dlls = {Path(_dest(e)).name.lower(): e for e in a.binaries
+           if _dest(e).startswith(QT_BIN) and Path(_dest(e)).name.lower().startswith("qt6")}
+needed, todo = set(), [e[1] for e in a.binaries if e not in qt_dlls.values()]
+while todo:
+    for name in bindepend.get_imports(todo.pop()):
+        name = (name if isinstance(name, str) else name[0]).lower()
+        if name in qt_dlls and name not in needed:
+            needed.add(name)
+            todo.append(qt_dlls[name][1])
+a.binaries = [e for e in a.binaries if e not in qt_dlls.values() or Path(_dest(e)).name.lower() in needed]
+
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz,

@@ -91,6 +91,7 @@ class LiveMap(SlippyMap):
         self.base_opacity = 1.0
         self.relief = ""
         self.relief_opacity = 0.5
+        self.contours = False         # courbes de niveau IGN au-dessus de la couverture
         self.shade_params = (315, 45, 3)
         self.coverage = None
         self.coverage_ref = None
@@ -113,13 +114,14 @@ class LiveMap(SlippyMap):
 
     # Réglages -------------------------------------------------------------------
 
-    def set_layers(self, base, base_opacity, relief, relief_opacity, shade_params):
+    def set_layers(self, base, base_opacity, relief, relief_opacity, shade_params, contours=False):
         if base and base != self.base:
             self.set_source(base)
         self.base = base
         self.base_opacity = base_opacity
         self.relief = relief
         self.relief_opacity = relief_opacity
+        self.contours = contours
         self.shade_params = tuple(shade_params)
         self.update()
 
@@ -387,6 +389,9 @@ class LiveMap(SlippyMap):
             painter.setOpacity(self.coverage_opacity)
             draw_platecarree(painter, self.coverage, self.coverage_ref, self.zoom,
                              self.cx - self.width() / 2, self.cy - self.height() / 2)
+        if self.contours:
+            painter.setOpacity(1.0)
+            self._draw_tiles(painter, "ign_courbes", min(self.zoom, basemap.SOURCES["ign_courbes"]["max_zoom"]))
         # Calques GeoJSON au-dessus des autres couches (sous les icônes et la légende).
         shown, self._hidden_layers = self._shown_vectors() if self.vectors else ([], [])
         signature = self._vector_signature(shown)
@@ -439,6 +444,8 @@ class LiveMap(SlippyMap):
             attributions.append(tr(basemap.SOURCES["ign_estompage"]["attribution"]))
         elif self.relief == "srtm":
             attributions.append(tr("relief : SRTM (NASA)"))
+        if self.contours:
+            attributions.append(tr(basemap.SOURCES["ign_courbes"]["attribution"]))
         attributions.append(tr("couverture : SPLAT!"))
         text = " — ".join(attributions)
         small = QFont()
@@ -504,8 +511,12 @@ def srtm_relief(ref, shade_params, url_template, log=lambda _m: None, width=2000
     return to_mercator_image(image, grid_ref)
 
 
+# Fonds proposés dans la page web (sélecteur de couches Leaflet).
+_HTML_BASES = ("osm", "opentopo", "ign_plan", "ign_ortho")
+
+
 def export_html(folder, coverage, ref, sites, icon_files, entries, base, relief, coverage_opacity, title,
-                vectors=(), srtm=None, view_ref=None):
+                vectors=(), srtm=None, view_ref=None, contours=False):
     """Écrit <folder>/index.html (Leaflet) + couverture reprojetée + icônes + calques GeoJSON
     (`vectors` : [(libellé, couleur, épaisseur, entités)], limités à l'emprise de la carte).
     Renvoie le chemin de la page."""
@@ -572,8 +583,8 @@ const map = L.map('map');
 const make = k => L.tileLayer(LAYERS[k].url, {{maxZoom: 19, maxNativeZoom: LAYERS[k].max,
                                                 attribution: LAYERS[k].attribution}});
 const bases = {{}};
-for (const k of ['osm', 'opentopo', 'ign_plan', 'ign_ortho']) bases[LAYERS[k].label] = make(k);
-bases[LAYERS['{base if base in ("osm", "opentopo", "ign_plan", "ign_ortho") else "osm"}'].label].addTo(map);
+for (const k of {json.dumps(list(_HTML_BASES))}) bases[LAYERS[k].label] = make(k);
+bases[LAYERS['{base if base in _HTML_BASES else "osm"}'].label].addTo(map);
 // Volet dédié au relief, entre les fonds (200) et les surcouches (400), fusionné en « produit ».
 const reliefPane = map.createPane('relief');
 reliefPane.style.zIndex = 250;
@@ -588,8 +599,14 @@ if (srtmLayer && {json.dumps(relief == "srtm")}) srtmLayer.addTo(map);
 const bounds = [[{south}, {west}], [{north}, {east}]];
 const coverage = L.imageOverlay('couverture.png', bounds, {{opacity: {coverage_opacity:.2f},
                                 attribution: 'couverture : SPLAT!'}}).addTo(map);
+// Courbes de niveau au-dessus de la couverture (overlayPane : 400), sous les calques (450).
+map.createPane('courbes').style.zIndex = 420;
+const contours = L.tileLayer(LAYERS.ign_courbes.url, {{maxZoom: 19, maxNativeZoom: LAYERS.ign_courbes.max,
+                             pane: 'courbes', attribution: LAYERS.ign_courbes.attribution}});
+if ({json.dumps(bool(contours))}) contours.addTo(map);
 const overlays = {{{json.dumps(tr('Estompage du relief (IGN)'))}: relief}};
 if (srtmLayer) overlays[{json.dumps(tr('Ombrage du relief (SRTM)'))}] = srtmLayer;
+overlays[{json.dumps(tr('Courbes de niveau (IGN)'))}] = contours;
 const control = L.control.layers(bases, overlays, {{collapsed: false}}).addTo(map);
 // Calques GeoJSON au-dessus des autres couches (overlayPane : 400), sous les marqueurs (600).
 map.createPane('calques').style.zIndex = 450;

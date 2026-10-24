@@ -1733,13 +1733,16 @@ class MainWindow(QMainWindow):
         open_terrain = QPushButton(tr("Ouvrir le dossier du relief"))
         open_terrain.clicked.connect(self._open_terrain_dir)
         terrain_buttons.addWidget(open_terrain)
-        self.dted_button = QPushButton(tr("Importer un relief (DTED, GeoTIFF, ASCII Grid)…"))
+        self.dted_button = QPushButton(tr("Importer un relief (DTED, GeoTIFF, ASCII Grid, Surfer, BIL, XYZ, SRTM)…"))
         self.dted_button.setToolTip(tr(
             "Convertit ses propres fichiers de relief en SDF dans le dossier SDF ci-dessus.\n"
             "DTED (.dt0, .dt1, .dt2) : SDF HD (1\") pour le .dt2, standard (3\") sinon.\n"
-            "GeoTIFF (.tif) et ESRI ASCII Grid (.asc) : SDF de la version de SPLAT! choisie "
-            "(standard ou HD) ; lon/lat, Lambert 93, CC42 à CC50 ou UTM ; dalles assemblées, "
-            "complétées hors des fichiers par le SDF existant ou Copernicus."))
+            "GeoTIFF (.tif), ESRI ASCII Grid (.asc), Surfer (.grd), grilles binaires avec en-tête .hdr "
+            "(BIL, BIP, BSQ, .flt, GTOPO30 .dem, ENVI .img), semis XYZ en grille (.xyz, .csv, .txt) et "
+            "tuiles SRTM (N48E002.hgt, .hgt.gz, .zip) : SDF de la version de SPLAT! choisie (standard ou "
+            "HD) ; lon/lat, Lambert 93, CC42 à CC50, UTM, LAEA Europe (EU-DEM), NTF Lambert I à IV (dont "
+            "le II étendu), Lambert belge 72 / 2008 ou suisse LV03 / LV95 ; dalles assemblées, complétées "
+            "hors des fichiers par le SDF existant ou Copernicus."))
         dted_menu = QMenu(self.dted_button)
         dted_menu.addAction(tr("Fichiers…"), self._convert_dted)
         dted_menu.addAction(tr("Dossier entier (sous-dossiers compris)…"), lambda: self._convert_dted(folder=True))
@@ -1941,6 +1944,22 @@ class MainWindow(QMainWindow):
         self.pano_tx.setToolTip(tr("Site d'où le panorama est vu"))
         self.pano_tx.currentIndexChanged.connect(lambda _i: self._update_panorama())
         bar.addWidget(self.pano_tx)
+        self.pano_renderer = QComboBox()
+        self.pano_renderer.addItem(tr("2D"), "2d")
+        self.pano_renderer.addItem(tr("3D"), "3d")
+        self.pano_renderer.setToolTip(tr("Panorama dessiné en 2D, ou relief en 3D avec la couverture radio "
+                                         "plaquée (carte graphique Direct3D 11 nécessaire)"))
+        bar.addWidget(labeled(tr("Rendu"), self.pano_renderer))
+        self.pano_camera = QComboBox()
+        self.pano_camera.addItem(tr("Depuis le site"), "site")
+        self.pano_camera.addItem(tr("En orbite"), "orbit")
+        self.pano_camera.setToolTip(tr("Vue 3D depuis le sommet de l'antenne, ou en orbite autour du site "
+                                       "(vue d'ensemble : glisser pour tourner autour, molette pour s'approcher)"))
+        stored = self.settings.get("panorama_camera", "site")
+        self.pano_camera.setCurrentIndex(max(0, self.pano_camera.findData(stored)))
+        self.pano_camera.currentIndexChanged.connect(self._panorama_camera_changed)
+        self.pano_camera_box = labeled(tr("Caméra"), self.pano_camera)
+        bar.addWidget(self.pano_camera_box)
         self.pano_radius = QDoubleSpinBox()
         self.pano_radius.setRange(2, 200)
         self.pano_radius.setDecimals(0)
@@ -1976,6 +1995,11 @@ class MainWindow(QMainWindow):
         self.pano_drape.setCurrentIndex(max(0, self.pano_drape.findData(stored)))
         self.pano_drape.currentIndexChanged.connect(self._panorama_drape_changed)
         bar.addWidget(labeled(tr("Placage"), self.pano_drape))
+        self.pano_coverage = QCheckBox(tr("Couverture radio"))
+        self.pano_coverage.setToolTip(tr("Couverture calculée par SPLAT! plaquée sur le relief 3D"))
+        self.pano_coverage.setChecked(bool(self.settings.get("panorama_coverage", True)))
+        self.pano_coverage.toggled.connect(self._panorama_coverage_toggled)
+        bar.addWidget(self.pano_coverage)
         self.pano_palette = QComboBox()
         for name, (label, _stops) in panorama.PALETTES.items():
             self.pano_palette.addItem(tr(label), name)
@@ -2051,14 +2075,18 @@ class MainWindow(QMainWindow):
         self.pano_view.set_min_population(self.pano_population.currentData())
         self.pano_view.set_fov(self.pano_fov.currentData())
         self.pano_view.repainted.connect(self._panorama_fov_sync)
+        self.pano_view.oriented.connect(self._panorama_3d_follow)
         self.pano_hover = QLabel(tr("Molette ou +/− : zoom · glisser ou ← → : tourner · Maj + molette ou Page ↑ ↓ : angle de vue · Origine ou double-clic : vue complète"))
-        self.pano_view.hovered.connect(lambda text: self.pano_hover.setText(text or tr("Molette ou +/− : zoom · glisser ou ← → : tourner · Maj + molette ou Page ↑ ↓ : angle de vue · Origine ou double-clic : vue complète")))
+        self.pano_view.hovered.connect(self._panorama_hovered)
         self.pano_hover.setWordWrap(True)
         pv.addLayout(bar)
         # Panorama sur une partie de la hauteur disponible (HEIGHT_FRACTION), carte orientée en dessous
         self.pano_map = panorama.PanoramaMap(self.pano_view)
         self.pano_map.set_show_horizon(self.pano_horizon.isChecked())
-        pv.addWidget(self.pano_view, round(100 * panorama.HEIGHT_FRACTION))
+        self.pano_stack = QStackedWidget()
+        self.pano_stack.addWidget(self.pano_view)
+        self.pano_view3d = None              # vue 3D, créée à la première demande
+        pv.addWidget(self.pano_stack, round(100 * panorama.HEIGHT_FRACTION))
         pv.addWidget(self.pano_hover)
         pv.addWidget(self.pano_map, round(100 * (1 - panorama.HEIGHT_FRACTION)))
         self.pano_tab = self.results_tabs.addTab(pano_page, tr("Panorama"))
@@ -2069,7 +2097,14 @@ class MainWindow(QMainWindow):
         self.pano_textures = {}              # ((dossier, émetteur, rayon), source) -> couleurs plaquées
         self.pano_map_layers = {}            # (dossier, émetteur, rayon) -> relief de la carte
         self.pano_terrain = None             # (dossiers SDF, HD) du panorama affiché
+        self.pano_meshes = {}                # (dossier, émetteur, rayon) -> maillage 3D
+        self.pano_textures3d = {}            # ((dossier, émetteur, rayon), couleurs, couverture) -> texture 3D
+        self.pano_site3d = None              # (site, hauteur, k, métrique) du panorama affiché
         self.results_tabs.currentChanged.connect(lambda _i: self._update_panorama())
+        stored = self.settings.get("panorama_renderer", "2d")
+        self.pano_renderer.setCurrentIndex(max(0, self.pano_renderer.findData(stored)))
+        self.pano_renderer.currentIndexChanged.connect(self._panorama_renderer_changed)
+        self._apply_panorama_renderer()
 
         # Fichiers
         files = QWidget()
@@ -2929,6 +2964,7 @@ class MainWindow(QMainWindow):
         if not self.pano_request:
             self.pano_view.set_data(None, None, [], 10, 1, True)
             self.pano_shown = None
+            self._update_panorama3d()
             return
         params, run_dir = self.pano_request
         index = max(0, self.pano_tx.currentIndex())
@@ -2952,8 +2988,10 @@ class MainWindow(QMainWindow):
         if params["mode"] == "p2p":
             others.append(params["rx_site"])
         k = linkprofile._number(params, "m") or 1.0
+        metric = bool(params.get("metric", True))
         self.pano_view.set_data(self.pano_cache[key], site, panorama.site_markers(site, others, sdf_dirs, hd),
-                                linkprofile.site_height_m(site), k, bool(params.get("metric", True)))
+                                linkprofile.site_height_m(site), k, metric)
+        self.pano_site3d = (site, linkprofile.site_height_m(site), k, metric)
         # Nouveau calcul ou autre émetteur (pas un simple changement de rayon) : vue centrée sur le récepteur
         if params["mode"] == "p2p" and (self.pano_shown or (None, None))[:2] != key[:2]:
             self._panorama_to_receiver()
@@ -2964,6 +3002,7 @@ class MainWindow(QMainWindow):
             self._load_panorama_places(key, site, radius, sdf_dirs, hd)
         self._load_panorama_map(key)
         self._load_panorama_drape()
+        self._update_panorama3d()
 
     def _load_panorama_drape(self):
         """Carte plaquée sur le panorama affiché, construite en arrière-plan (tuiles en cache)."""
@@ -3010,6 +3049,7 @@ class MainWindow(QMainWindow):
     def _panorama_drape_changed(self, _index):
         self.settings["panorama_drape"] = self.pano_drape.currentData()
         self._load_panorama_drape()
+        self._load_panorama_texture3d()
 
     def _load_panorama_places(self, key, site, radius, sdf_dirs, hd):
         """Localités autour du site, chargées en arrière-plan (téléchargement à la première fois)."""
@@ -3033,6 +3073,7 @@ class MainWindow(QMainWindow):
         value = self.pano_population.currentData()
         self.settings["panorama_min_population"] = value
         self.pano_view.set_min_population(value)
+        self._panorama_3d_labels()
 
     def _show_panorama_places(self, key):
         """Localités dans le rayon sur le panorama, toutes (jusqu'aux coins) sur la carte."""
@@ -3040,10 +3081,17 @@ class MainWindow(QMainWindow):
         radius = float(self.pano_cache[key]["distance"][-1])
         self.pano_view.set_places([p for p in places if p["distance"] <= radius])
         self.pano_map.set_places(places)
+        self._panorama_3d_labels()
+
+    def _panorama_3d_labels(self):
+        """Noms des localités de la vue 3D redessinés (liste ou réglages changés)."""
+        if self.pano_view3d:
+            self.pano_view3d.labels.update()
 
     def _panorama_places_toggled(self, checked):
         self.settings["panorama_places"] = checked
         self.pano_view.set_show_places(checked)
+        self._panorama_3d_labels()
         if checked and self.pano_request and self.pano_shown and self.pano_shown not in self.pano_places:
             params, run_dir = self.pano_request
             site = params["tx_sites"][max(0, self.pano_tx.currentIndex())]
@@ -3053,6 +3101,7 @@ class MainWindow(QMainWindow):
     def _panorama_palette_changed(self, _index):
         self.settings["panorama_palette"] = self.pano_palette.currentData()
         self.pano_view.set_palette(self.pano_palette.currentData())
+        self._load_panorama_texture3d()
 
     def _panorama_gradient_changed(self, _index):
         self.settings["panorama_gradient"] = self.pano_gradient.currentData()
@@ -3084,11 +3133,179 @@ class MainWindow(QMainWindow):
     def _panorama_haze_changed(self, _index):
         self.settings["panorama_haze"] = self.pano_haze.currentData()
         self.pano_view.set_haze(self.pano_haze.currentData())
+        if self.pano_view3d:
+            self.pano_view3d.set_haze(self.pano_haze.currentData())
 
     def _panorama_exaggeration_changed(self, _index):
         factor = self.pano_exaggeration.currentData()
         self.settings["panorama_exaggeration"] = factor
         self.pano_view.set_exaggeration(factor)
+        if self.pano_view3d:
+            self.pano_view3d.set_exaggeration(factor or 1.0)       # Auto : relief à l'échelle réelle
+
+    def _panorama_hovered(self, text):
+        orbit = self._panorama_3d_active() and self.pano_view3d.orbit()
+        self.pano_hover.setText(text or (tr("Glisser ou ← → : tourner autour du site et incliner · molette ou +/− : "
+                                            "s'approcher · Maj + molette ou Page ↑ ↓ : inclinaison · Origine : "
+                                            "vue d'ensemble") if orbit else
+                                         tr("Glisser ou ← → : tourner et lever les yeux · molette ou +/− : zoom · "
+                                            "Maj + molette ou Page ↑ ↓ : angle de vue · Origine : vue large")
+                                         if self._panorama_3d_active() else
+                                         tr("Molette ou +/− : zoom · glisser ou ← → : tourner · Maj + molette ou Page ↑ ↓ : angle de vue · Origine ou double-clic : vue complète")))
+
+    # ---- Panorama 3D ----------------------------------------------------------
+
+    def _panorama_3d_active(self):
+        return self.pano_view3d is not None and self.pano_stack.currentWidget() is self.pano_view3d
+
+    def _panorama_renderer_changed(self, _index):
+        self.settings["panorama_renderer"] = self.pano_renderer.currentData()
+        self._apply_panorama_renderer()
+
+    def _apply_panorama_renderer(self):
+        """Affiche la vue 2D ou 3D (créée à la première demande, repli en 2D si Qt Quick 3D
+        n'est pas utilisable) et active les réglages propres à chacune."""
+        want3d = self.pano_renderer.currentData() == "3d"
+        if want3d and self.pano_view3d is None:
+            try:
+                from . import panorama3d
+                view = panorama3d.Panorama3DView()
+            except (ImportError, RuntimeError) as exc:
+                self._panorama_3d_failed(str(exc))
+                return
+            view.set_exaggeration(self.pano_exaggeration.currentData() or 1.0)
+            view.viewChanged.connect(self._panorama_3d_moved)
+            view.hovered.connect(self._panorama_hovered)
+            view.failed.connect(self._panorama_3d_failed)
+            view.set_places_source(self.pano_view)
+            view.set_orbit(self.pano_camera.currentData() == "orbit")
+            self.pano_view3d = view
+            self.pano_stack.addWidget(view)
+        self.pano_stack.setCurrentWidget(self.pano_view3d if want3d else self.pano_view)
+        for widget in (self.pano_gradient, self.pano_contours):
+            widget.setEnabled(not want3d)
+        self.pano_coverage.setVisible(want3d)
+        self.pano_camera_box.setVisible(want3d)
+        self._panorama_hovered("")
+        if want3d:
+            self._panorama_3d_follow()
+            self._update_panorama3d()
+
+    def _panorama_camera_changed(self, _index):
+        self.settings["panorama_camera"] = self.pano_camera.currentData()
+        if self.pano_view3d:
+            self.pano_view3d.set_orbit(self.pano_camera.currentData() == "orbit")
+            self._panorama_hovered("")
+
+    def _panorama_3d_failed(self, message):
+        """Vue 3D indisponible (Qt Quick 3D absent, carte graphique) : retour au panorama 2D."""
+        if self.pano_view3d is not None:
+            self.pano_stack.removeWidget(self.pano_view3d)
+            self.pano_view3d.deleteLater()
+            self.pano_view3d = None
+        self.pano_renderer.blockSignals(True)
+        self.pano_renderer.setCurrentIndex(self.pano_renderer.findData("2d"))
+        self.pano_renderer.blockSignals(False)
+        self.settings["panorama_renderer"] = "2d"
+        self._apply_panorama_renderer()
+        self.pano_hover.setText(tr("Panorama 3D indisponible, retour au rendu 2D : {error}", error=message))
+
+    def _panorama_3d_moved(self, yaw, fov):
+        """Vue 3D tournée ou zoomée : la carte (qui suit le panorama 2D) est réorientée."""
+        self.pano_view.center, self.pano_view.fov = yaw % 360, fov
+        self.pano_view.update()
+        self.pano_map.update()
+        self._panorama_fov_sync()
+
+    def _panorama_3d_follow(self):
+        """Orientation donnée par la carte, les boutons ou la liste : appliquée à la vue 3D (champ
+        limité à celui de la caméra, recopié dans la vue 2D pour que la carte corresponde)."""
+        if not self._panorama_3d_active():
+            return
+        self.pano_view3d.set_view(yaw=self.pano_view.center, fov=self.pano_view.fov)
+        yaw, fov, _pitch = self.pano_view3d.view()
+        if abs(fov - self.pano_view.fov) > 1e-6:
+            self._panorama_3d_moved(yaw, fov)
+
+    def _update_panorama3d(self):
+        """Maillage du relief (calculé une fois par émetteur et rayon, en arrière-plan) et texture
+        de la vue 3D, quand elle est affichée."""
+        if not self._panorama_3d_active():
+            return
+        from . import panorama3d
+        key = self.pano_shown
+        view = self.pano_view3d
+        if key is None or self.pano_site3d is None:
+            view.set_mesh(None)
+            return
+        if key in self.pano_meshes:
+            if view.mesh is not self.pano_meshes[key]:
+                view.set_mesh(self.pano_meshes[key], self.pano_site3d[3])
+                view.set_haze(self.pano_haze.currentData())
+            self._load_panorama_texture3d()
+            return
+        view.set_mesh(None)
+        site, height, k, _metric = self.pano_site3d
+        ground = self.pano_cache[key]["site_ground"]
+        sdf_dirs, hd = self.pano_terrain
+        radius = key[2]
+
+        def done(mesh):
+            self.pano_meshes = {key: mesh}            # un seul maillage gardé (une vingtaine de Mo)
+            if self.pano_shown == key:
+                self._update_panorama3d()
+            self._panorama_hovered("")
+
+        self.pano_hover.setText(tr("Panorama 3D : maillage du relief…"))
+        self._run_task(("mesh3d", key), lambda: panorama3d.build_mesh(site, ground, sdf_dirs, hd, radius, height, k),
+                       done, lambda error: self.pano_hover.setText(tr("Panorama 3D impossible : {error}", error=error)))
+
+    def _panorama_coverage_image(self, run_dir):
+        """Carte SPLAT! calée du calcul pour la couverture plaquée : celle affichée si elle en fait
+        partie, sinon la première."""
+        current = self.image_combo.currentData()
+        candidates = ([Path(current)] if current and Path(current).parent == Path(run_dir) else []) \
+            + sorted(Path(run_dir).glob("*.ppm"))
+        return next((p for p in candidates if p.suffix.lower() == ".ppm" and basemap.georef_for(p)), None)
+
+    def _panorama_coverage_toggled(self, checked):
+        self.settings["panorama_coverage"] = checked
+        self._load_panorama_texture3d()
+
+    def _load_panorama_texture3d(self):
+        """Texture de la vue 3D (carte plaquée ou dégradé d'altitude, et couverture), construite en
+        arrière-plan (tuiles de la carte téléchargées puis mises en cache)."""
+        if not self._panorama_3d_active() or self.pano_shown not in self.pano_meshes:
+            return
+        from . import panorama3d
+        key = self.pano_shown
+        mesh = self.pano_meshes[key]
+        palette = self.pano_palette.currentData()
+        coverage = self._panorama_coverage_image(key[0]) if self.pano_coverage.isChecked() else None
+        source = self.pano_drape.currentData()
+        tkey = (key, palette if not source else "", str(coverage), source)
+        if tkey in self.pano_textures3d:
+            self.pano_view3d.set_texture(self.pano_textures3d[tkey])
+            return
+
+        def build():
+            layer = panorama3d.coverage_for(coverage) if coverage else None
+            drape = panorama3d.drape_for(mesh, source) if source else None
+            return panorama3d.build_texture(mesh, palette, layer, drape)
+
+        def done(texture):
+            self.pano_textures3d = {k: v for k, v in self.pano_textures3d.items() if k[0] == key}
+            self.pano_textures3d[tkey] = texture
+            if self.pano_shown == key:
+                self._load_panorama_texture3d()          # réglages peut-être changés entre-temps
+            if source:
+                self.pano_hover.setText(tr("Placage : {source}", source=tr(basemap.SOURCES[source]["label"])))
+
+        if source:
+            self.pano_hover.setText(tr("Placage : chargement de {source}…",
+                                       source=tr(basemap.SOURCES[source]["label"])))
+        self._run_task(("texture3d", tkey), build, done,
+                       lambda error: self.pano_hover.setText(tr("Panorama 3D impossible : {error}", error=error)))
 
     def _panorama_to_receiver(self):
         rx = self.pano_request[0]["rx_site"]["name"] if self.pano_request else None
@@ -3100,10 +3317,11 @@ class MainWindow(QMainWindow):
         if not self.pano_view.data:
             return
         name = splat.safe_filename(self.pano_view.site["name"])
-        default = str(Path(self.shown_dir or ".") / f"panorama_{name}.png")
+        view3d = self.pano_view3d if self._panorama_3d_active() else None
+        default = str(Path(self.shown_dir or ".") / f"panorama{'_3d' if view3d else ''}_{name}.png")
         path, _ = QFileDialog.getSaveFileName(self, tr("Exporter le panorama"), default, "PNG (*.png)")
         if path:
-            self.pano_view.image().save(path)
+            (view3d or self.pano_view).image().save(path)
 
     def _export_profile(self):
         if not self.profile_view.profile:
@@ -3184,6 +3402,13 @@ class MainWindow(QMainWindow):
         if refresh:
             self._toggle_crop()
 
+    def _relief_note(self, relief):
+        """Note de légende sur le relief affiché (ombrage et courbes de niveau), ou None."""
+        notes = [{"srtm": tr("Relief : SRTM (NASA)"), "ign_estompage": tr("Relief : estompage IGN")}.get(relief)]
+        if self.contour_check.isChecked():
+            notes.append(tr("Courbes de niveau : IGN"))
+        return " ; ".join(n for n in notes if n) or None
+
     def _decorate(self, image, source, relief_note):
         """Légende (d'après le contenu de la carte), échelle et nord."""
         if self.current_coverage is None:
@@ -3251,7 +3476,8 @@ class MainWindow(QMainWindow):
         relief = self.relief_source.currentData()
         live.set_layers(self.basemap_combo.currentData(), self.basemap_opacity.value() / 100,
                         relief, self.relief_opacity.value() / 100,
-                        (self.sun_azimuth.value(), self.sun_altitude.value(), self.exaggeration.value()))
+                        (self.sun_azimuth.value(), self.sun_altitude.value(), self.exaggeration.value()),
+                        self.contour_check.isChecked())
         live.set_coverage(coverage, self.full_ref, self.coverage_opacity.value() / 100,
                           self.coverage_check.isChecked())
         key = (self.image_combo.currentData(), self.full_ref.width, self.full_ref.height)
@@ -3263,7 +3489,7 @@ class MainWindow(QMainWindow):
             names = sites.icon_names(self.current_sites, self.tx_icon.currentData(), self.rx_icon.currentData())
             live.markers = [(site["lat"], site["lon"], sites.icon(name, 64) if name else None, site["name"])
                             for name, site in zip(names, self.current_sites)]
-        relief_note = {"ign_estompage": tr("Relief : estompage IGN"), "srtm": tr("Relief : SRTM (NASA)")}.get(relief)
+        relief_note = self._relief_note(relief)
         live.level_at = self._level_at
         live.set_vectors(self._live_vectors(), self.layer_opacity.value() / 100)
         live.legend_entries = self._legend_entries(coverage, None, relief_note, online=True)
@@ -3345,6 +3571,7 @@ class MainWindow(QMainWindow):
         entries = self._legend_entries(coverage, None, None, online=True) if self.legend_check.isChecked() else []
         base = self.basemap_combo.currentData() or "osm"
         ref, relief = self.full_ref, self.relief_source.currentData()
+        contours = self.contour_check.isChecked()
         # Zone de la page : la zone utile élargie d'un tiers, sans dépasser la carte SPLAT!.
         content = self._content_ref() or ref
         c_west, c_south, c_east, c_north = content.bounds()
@@ -3367,7 +3594,7 @@ class MainWindow(QMainWindow):
             srtm = livemap.srtm_relief(view_ref, shade, url, signals.emit)
             vectors = [(label, color, width, layers.load(path)) for label, color, width, path in layer_specs]
             return livemap.export_html(run_dir / "web", coverage, ref, self.current_sites, icon_files, entries,
-                                       base, relief, opacity, title, vectors, srtm, view_ref)
+                                       base, relief, opacity, title, vectors, srtm, view_ref, contours)
 
         def done(page):
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(page)))
@@ -3505,6 +3732,11 @@ class MainWindow(QMainWindow):
         graduate(self.relief_opacity, 10)
         row2.addWidget(self.relief_opacity, 1)
         row2.addWidget(SliderValue(self.relief_opacity))
+        self.contour_check = QCheckBox(tr("Courbes de niveau"))
+        self.contour_check.setToolTip(tr("Courbes de niveau IGN (France) au-dessus de la couverture radio, "
+                                      "téléchargées en ligne"))
+        self.contour_check.setChecked(bool(overlay.get("contours", False)))
+        row2.addWidget(self.contour_check)
         self.blur_label = QLabel(tr("Flou couverture :"))
         row2.addWidget(self.blur_label)
         self.coverage_blur = QSlider(Qt.Orientation.Horizontal)
@@ -3537,6 +3769,7 @@ class MainWindow(QMainWindow):
         row2.addWidget(self.kml_button)
         self.relief_source.currentIndexChanged.connect(lambda _i: self._overlay_timer.start())
         self.relief_opacity.valueChanged.connect(lambda _v: self._overlay_timer.start())
+        self.contour_check.toggled.connect(lambda _c: self._overlay_timer.start())
         self.display_mode.currentIndexChanged.connect(self._display_mode_changed)
         self.live_key = None
         self.live_coverage = None
@@ -3573,6 +3806,7 @@ class MainWindow(QMainWindow):
             "display_mode": self.display_mode.currentData(),
             "relief_source": self.relief_source.currentData(),
             "relief_opacity": self.relief_opacity.value(),
+            "contours": self.contour_check.isChecked(),
             "coverage_blur": self.coverage_blur.value(),
             "crop": self.crop_check.isChecked(),
             "aspect": self.aspect_check.isChecked(),
@@ -3987,6 +4221,7 @@ class MainWindow(QMainWindow):
         relief = self.relief_source.currentData()
         shade = self._srtm_estompage() if relief == "srtm" else None
         ign_relief = self._raster_layer("ign_estompage") if relief == "ign_estompage" else None
+        contours = self._raster_layer("ign_courbes") if self.contour_check.isChecked() else None
         if self.current_coverage is None:
             self.current_coverage = basemap.coverage_layer(image)
         # Ordre : relief SPLAT! (sans la couverture) → fond de carte → ombrage → couverture radio
@@ -4009,15 +4244,23 @@ class MainWindow(QMainWindow):
         self.display_ref = self.current_ref
         if (self.aspect_check.isChecked() or self._frame_ratio()) and self.current_ref is not None:
             image, self.display_ref = basemap.correct_aspect(image, self.current_ref)
+            if contours is not None:
+                contours, contour_ref = basemap.correct_aspect(contours, self.current_ref)
             if self._frame_ratio():
                 image, self.display_ref = basemap.force_ratio(image, self.display_ref, self._frame_ratio())
+                if contours is not None:
+                    contours, _ = basemap.force_ratio(contours, contour_ref, self._frame_ratio())
             notes.insert(0, tr("largeur × {factor:.2f}", factor=basemap.aspect_factor(self.current_ref)))
-        if self.coverage_check.isChecked():
-            coverage = self._display_coverage(image.size())
+        if self.coverage_check.isChecked() or contours is not None:
             image = image.convertToFormat(QImage.Format.Format_ARGB32_Premultiplied)
             painter = QPainter(image)
-            painter.setOpacity(self.coverage_opacity.value() / 100)
-            painter.drawImage(0, 0, coverage)
+            if self.coverage_check.isChecked():
+                painter.setOpacity(self.coverage_opacity.value() / 100)
+                painter.drawImage(0, 0, self._display_coverage(image.size()))
+            if contours is not None:       # courbes de niveau lisibles au-dessus de la couverture
+                painter.setOpacity(1.0)
+                painter.drawImage(image.rect(), contours)
+                notes.append(tr(basemap.SOURCES["ign_courbes"]["attribution"]))
             painter.end()
         # Calques vectoriels après la correction : traits et textes ne sont pas déformés.
         image = self._draw_vector_layers(image, self.display_ref)
@@ -4026,8 +4269,7 @@ class MainWindow(QMainWindow):
             sites.draw_sites(image, self.display_ref, self.current_sites, self.tx_icon.currentData(),
                              self.rx_icon.currentData(), self.icon_size.value(), self.site_names.isChecked())
         if self.display_ref is not None and (self.legend_check.isChecked() or self.scale_check.isChecked()):
-            image = self._decorate(image, source, {"srtm": tr("Relief : SRTM (NASA)"),
-                                                   "ign_estompage": tr("Relief : estompage IGN")}.get(relief))
+            image = self._decorate(image, source, self._relief_note(relief))
         if not self.overlay_status.text():
             self.overlay_status.setText(" — ".join(notes))
         self.current_composite = image
@@ -4294,22 +4536,25 @@ class MainWindow(QMainWindow):
         if self._busy():
             return
         start = self.settings.get("dted_folder", "")
-        suffixes = dted.SUFFIXES + demimport.SUFFIXES
         if folder:
             chosen = QFileDialog.getExistingDirectory(self, tr("Importer un dossier de relief"), start)
             if not chosen:
                 return
-            files = sorted(p for p in Path(chosen).rglob("*") if p.suffix.lower() in suffixes)
+            files = sorted(p for p in Path(chosen).rglob("*")
+                           if p.suffix.lower() in dted.SUFFIXES or demimport.supported(p))
             if not files:
                 QMessageBox.information(self, tr("Importer un dossier de relief"),
-                                        tr("Aucun fichier .dt0, .dt1, .dt2, .tif ou .asc dans {folder}.", folder=chosen))
+                                        tr("Aucun fichier de relief reconnu (DTED, GeoTIFF, ASCII Grid, Surfer, BIL, XYZ, SRTM) dans {folder}.",
+                                           folder=chosen))
                 return
             self.settings["dted_folder"] = chosen
         else:
             files, _ = QFileDialog.getOpenFileNames(
                 self, tr("Importer des fichiers de relief"), start,
-                tr("Relief (*.dt0 *.dt1 *.dt2 *.tif *.tiff *.asc);;Tuiles DTED (*.dt0 *.dt1 *.dt2);;"
-                   "GeoTIFF (*.tif *.tiff);;ESRI ASCII Grid (*.asc);;Tous les fichiers (*)"))
+                tr("Relief (*.dt0 *.dt1 *.dt2 *.tif *.tiff *.asc *.grd *.bil *.bip *.bsq *.flt *.dem *.img *.xyz "
+                   "*.csv *.txt *.hgt *.hgt.gz *.zip);;Tuiles DTED (*.dt0 *.dt1 *.dt2);;GeoTIFF (*.tif *.tiff);;"
+                   "ESRI ASCII Grid (*.asc);;Surfer (*.grd);;Grilles binaires avec .hdr (*.bil *.bip *.bsq *.flt *.dem *.img);;"
+                   "Semis XYZ (*.xyz *.csv *.txt);;Tuiles SRTM (*.hgt *.hgt.gz *.zip);;Tous les fichiers (*)"))
             if not files:
                 return
             self.settings["dted_folder"] = str(Path(files[0]).parent)
@@ -4320,7 +4565,7 @@ class MainWindow(QMainWindow):
         sdf_dir = Path(self.sdf_dir.text().strip() or terrain.SDF_DIR)
         self._console_write(tr("Import du relief : {n} fichier(s) vers {folder}\n", n=len(files), folder=sdf_dir))
         if grid_files:
-            self._console_write(tr("GeoTIFF / ASCII Grid : SDF {kind}\n", kind=tr("HD") if hd else tr("standard")))
+            self._console_write(tr("Grilles de relief : SDF {kind}\n", kind=tr("HD") if hd else tr("standard")))
         self.results_tabs.setCurrentWidget(self.console)
 
         def work(log, cancel, progress):
