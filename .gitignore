@@ -1,0 +1,16 @@
+# Fichiers de configuration et données personnelles (créés par l'application)
+/settings.json
+/history.json
+/profiles/
+/qth/
+/lrp/
+
+# Modèles de terrain (téléchargés ou convertis)
+/terrain/
+*.sdf
+*.hgt
+*.hgt.gz
+*.hgt.zip
+*.dt0
+*.dt1
+*.dt2
