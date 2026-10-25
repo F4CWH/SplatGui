@@ -4,6 +4,11 @@
 /profiles/
 /qth/
 /lrp/
+/runs/
+
+# Dépendances téléchargées par l'application (fenêtre Pré-requis) : DLL de SPLAT! et gnuplot
+/deps/
+/gnuplot/
 
 # Modèles de terrain (téléchargés ou convertis)
 /terrain/

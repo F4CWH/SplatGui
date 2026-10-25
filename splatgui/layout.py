@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QFont, QFontMetricsF, QImage, QPainter, QPen, QPolygonF
+from . import coverpal
 from .i18n import tr
 
 GREEN, CYAN, VIOLET, SIENNA = (0, 255, 0), (0, 255, 255), (147, 112, 219), (255, 130, 71)
@@ -70,9 +71,9 @@ def read_color_file(path):
     return entries
 
 
-def _pathloss_scale(run_dir, args):
+def _pathloss_scale(run_dir, args, palette=None):
     """(titre, [(texte, couleur)]) pour une carte -L, d'après le fichier de couleurs utilisé."""
-    levels = _pathloss_levels(run_dir, args)
+    levels = _pathloss_levels(run_dir, args, palette)
     if levels is None:
         return None
     kind, title, unit, entries = levels
@@ -86,9 +87,10 @@ def _pathloss_scale(run_dir, args):
     return title, rows
 
 
-def _pathloss_levels(run_dir, args):
+def _pathloss_levels(run_dir, args, palette=None):
     """(extension, titre, unité, [(valeur, couleur)]) du fichier de couleurs d'une carte -L
-    (.dcf : dBm avec -dbm, .scf : champ avec une PAR, sinon .lcf : perte), ou None."""
+    (.dcf : dBm avec -dbm, .scf : champ avec une PAR, sinon .lcf : perte), ou None. Avec
+    `palette` : couleurs de cette palette sur les seuils du calcul (carte recoloriée)."""
     run_dir = Path(run_dir)
     tx = next(iter(sorted(run_dir.glob("tx1_*.qth"))), None)
     if tx is None:
@@ -114,7 +116,22 @@ def _pathloss_levels(run_dir, args):
     if not path.exists():
         return None
     entries = read_color_file(path)
+    if entries and palette:
+        entries = coverpal.map_entries(entries, kind, palette)
     return (kind, title, unit, entries) if entries else None
+
+
+def recolor_map(image, run_dir, palette):
+    """Carte -L du dossier `run_dir` aux couleurs de `palette` (seuils du calcul conservés) ;
+    `image` inchangée pour un autre mode ou sans fichier de couleurs."""
+    args = run_arguments(run_dir)
+    if not palette or run_mode(args) != "pathloss":
+        return image
+    levels = _pathloss_levels(run_dir, args)
+    if levels is None:
+        return image
+    kind, _title, _unit, entries = levels
+    return coverpal.recolor_image(image, entries, coverpal.map_entries(entries, kind, palette), kind, "-sc" in args)
 
 
 def _is_relief(rgb):
@@ -129,7 +146,7 @@ def _distance_km(lat1, lon1, lat2, lon2):
     return 2 * 6371.0 * math.asin(math.sqrt(min(1.0, a)))
 
 
-def level_lookup(run_dir, tx_sites):
+def level_lookup(run_dir, tx_sites, palette=None):
     """Fonction (r, g, b, lat, lon) -> texte du niveau de réception représenté par un pixel de
     la carte SPLAT! du dossier `run_dir`, ou None (point à point, couleur non reconnue).
     -L : couleur du fichier .dcf / .scf / .lcf (avec -sc, couleurs interpolées entre deux
@@ -142,7 +159,7 @@ def level_lookup(run_dir, tx_sites):
         range_km = float(_arg_value(args, "-R")) * (1.0 if "-metric" in args else 1.609344)
     except (TypeError, ValueError):
         range_km = None
-    lookup = _level_function(run_dir, args, mode, tx_names)
+    lookup = _level_function(run_dir, args, mode, tx_names, palette)
     if lookup is None:
         return None
 
@@ -154,7 +171,7 @@ def level_lookup(run_dir, tx_sites):
     return level
 
 
-def _level_function(run_dir, args, mode, tx_names):
+def _level_function(run_dir, args, mode, tx_names, palette=None):
     """Fonction (r, g, b) -> texte du niveau, selon le mode de la carte, ou None."""
     if mode == "coverage":
         colors = {color: combo for combo, color in COVERAGE_COLORS if max(combo) <= len(tx_names)}
@@ -167,7 +184,7 @@ def _level_function(run_dir, args, mode, tx_names):
         return coverage
     if mode != "pathloss":
         return None
-    levels = _pathloss_levels(run_dir, args)
+    levels = _pathloss_levels(run_dir, args, palette)
     if levels is None:
         return None
     kind, title, unit, entries = levels
@@ -222,7 +239,7 @@ def _present_colors(coverage):
     return {(int(c[2]), int(c[1]), int(c[0])) for c, n in zip(colors, counts) if n >= 3}
 
 
-def legend_entries(run_dir, coverage, sites, site_icons, layers, attributions, show_coverage=True):
+def legend_entries(run_dir, coverage, sites, site_icons, layers, attributions, show_coverage=True, palette=None):
     """Liste d'éléments : ("title", texte) | ("swatch", couleur, texte) |
     ("line", couleur, texte) | ("icon", QImage, texte) | ("note", texte)."""
     args = run_arguments(run_dir)
@@ -245,7 +262,7 @@ def legend_entries(run_dir, coverage, sites, site_icons, layers, attributions, s
             if max(combo) <= len(tx_names) and color in present:
                 entries.append(("swatch", color, " + ".join(tx_names[i - 1] for i in combo)))
     elif mode == "pathloss":
-        scale = _pathloss_scale(run_dir, args)
+        scale = _pathloss_scale(run_dir, args, palette)
         if scale:
             title, rows = scale
             height = _arg_value(args, "-L")

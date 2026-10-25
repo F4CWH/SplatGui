@@ -14,7 +14,7 @@ Un peu d'histoire : <https://udel.edu/~mm/itm>...
 
 ## Fonctionnalités
 
-- **Modes d'analyse** : liaison point à point (`-t` / `-r`), couverture visuelle (LOS, `-c`), couverture régionale / champ (`-L`), jusqu'à 30 émetteurs ; versions x64 / x86, standard et HD.
+- **Modes d'analyse** : liaison point à point (`-t` / `-r`), couverture visuelle (LOS, `-c`), couverture RF / champ (`-L`), jusqu'à 30 émetteurs ; versions x64 / x86, standard et HD.
 - **Sites** : tableau des émetteurs, récepteur, import / export `.qth`, coordonnées décimales ou en degrés-minutes-secondes, placement sur une carte OSM / IGN (plan, photographies aériennes, carte physique du relief) avec recherche d'adresse.
 - **Antennes** :
   - bibliothèque de diagrammes de rayonnement (MSI / Planet, NSMA / TIA-804 `.adf`, sortie NEC-2 / 4nec2, EZNEC, SPLAT! `.az` / `.el`, texte / CSV) ;
@@ -46,6 +46,7 @@ Un peu d'histoire : <https://udel.edu/~mm/itm>...
 - **Cartes** :
   - image composée (fond de carte, ombrage du relief, couverture, courbes de niveau IGN facultatives au-dessus de la couverture, calques GeoJSON, icônes des sites, légende, échelle, nord, proportions corrigées) ;
   - ou carte en ligne interactive ;
+  - palette de couleurs de la couverture RF (-L) au choix dans **Fichier → Palettes de couleurs…** : couleurs de SPLAT!, palettes fournies (feu tricolore, spectre, chaleur, Viridis pour les daltoniens, bleus, Spectral) ou palettes personnelles créées dans la même fenêtre (couleurs, et seuils propres en dBm, dBµV/m et dB ou ceux de SPLAT!) ;
   - export PNG / PPM géoréférencé, en page web Leaflet ou pour Google Earth (`.kmz` / `.kml` : couverture, sites, calques et légende).
 - **Profils et historique** : paramètres enregistrés par profil, historique des calculs rechargeable.
 - **Interface** : français, anglais et espagnol ; thèmes Système, Clair, Sombre, Bleu nuit, Sépia et Contraste élevé.
@@ -53,7 +54,12 @@ Un peu d'histoire : <https://udel.edu/~mm/itm>...
 
 ## Installation
 
-Téléchargez l'installeur `SPLAT!Gui-Setup-<version>.exe` et lancez-le. L'installation se fait par utilisateur (`%LOCALAPPDATA%\Programs\SPLAT!Gui`), sans droits administrateur. L'assistant permet de choisir :
+Deux installeurs sont proposés dans les releases :
+
+- `SPLAT!Gui-Setup-<version>-complet.exe` : SPLAT!Gui avec les exécutables Windows de SPLAT! x64 et x86 (`splat.exe`, `splat-hd.exe`, utilitaires), leurs DLL d'exécution MSYS2 / MinGW et gnuplot. Tout est prêt dès le premier démarrage ;
+- `SPLAT!Gui-Setup-<version>.exe` : SPLAT!Gui seul. SPLAT!, ses DLL et gnuplot s'installent ensuite depuis l'application (voir plus bas).
+
+Les deux installeurs mettent à jour la même installation : on peut passer de l'un à l'autre. L'installation se fait par utilisateur (`%LOCALAPPDATA%\Programs\SPLAT!Gui`), sans droits administrateur. L'assistant permet de choisir :
 
 - le dossier des **résultats** des calculs (`runs`) ;
 - le dossier des **sites** (`qth`) ;
@@ -63,7 +69,9 @@ Ces dossiers restent modifiables dans **Fichier → Réglages**.
 
 ### SPLAT!, ses DLL et gnuplot
 
-SPLAT! n'est distribué qu'en code source : SPLAT!Gui ne contient pas ses exécutables Windows. Au premier démarrage, l'application propose la fenêtre **Fichier → Pré-requis (SPLAT!, DLL, gnuplot)…**, qui permet :
+SPLAT! n'est distribué qu'en code source. Les exécutables Windows de l'installeur complet sont compilés à partir de <https://github.com/F4CWH/splat> (GNU GPL v2). Les dossiers des DLL et de gnuplot qu'il installe sont ajoutés au PATH d'exécution au démarrage qui suit l'installation.
+
+Avec l'installeur de SPLAT!Gui seul, la fenêtre **Fichier → Pré-requis (SPLAT!, DLL, gnuplot)…**, proposée au premier démarrage, permet :
 
 - d'installer `splat.exe`, `splat-hd.exe` et les utilitaires (`srtm2sdf`…) depuis une archive `.zip` / `.tar.*`, locale ou en ligne. L'architecture x64 / x86 de chaque exécutable est détectée automatiquement ;
 - de télécharger les DLL d'exécution :
@@ -90,10 +98,13 @@ L'exécutable est produit par [PyInstaller](https://pyinstaller.org) et l'instal
 powershell -ExecutionPolicy Bypass -File installer\build_installer.ps1
 ```
 
+L'installeur complet inclut les dossiers `bin\x64`, `bin\x86`, `deps\x64`, `deps\x86` et `gnuplot\` du projet : ils doivent être en place au préalable, par exemple avec la fenêtre **Pré-requis**. Le script s'arrête s'il en manque un.
+
 Le script produit :
 
 - `dist\SPLAT!Gui\` : l'application, avec `SPLAT!Gui.exe` et ses bibliothèques dans `lib\` ;
-- `dist\SPLAT!Gui-Setup-<version>.exe` : l'installeur.
+- `dist\SPLAT!Gui-Setup-<version>.exe` : l'installeur de l'application seule ;
+- `dist\SPLAT!Gui-Setup-<version>-complet.exe` : l'installeur complet, avec SPLAT!, ses DLL et gnuplot.
 
 La version est lue dans `splatgui/__init__.py`. L'option `-SkipPyInstaller` reconstruit seulement l'installeur.
 

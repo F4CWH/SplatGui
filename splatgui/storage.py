@@ -141,6 +141,8 @@ def default_settings():
         "runs_dir": str(PROJECT_DIR / "runs"),
         "qth_dir": str(QTH_DIR),
         "lrp_dir": str(LRP_DIR),
+        "coverage_palette": "",     # couleurs des contours -L (coverpal) ; "" = celles de SPLAT!
+        "coverage_palettes": [],    # palettes personnelles [{"name", "colors"}]
     }
 
 

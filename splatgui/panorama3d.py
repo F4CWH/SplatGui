@@ -829,10 +829,13 @@ def _ground_at(mesh, east, north):
                  + ground[r0 + 1, c0] * fr * (1 - fc) + ground[r0 + 1, c0 + 1] * fr * fc)
 
 
-def coverage_for(image_path):
-    """(calque de couverture, GeoRef) d'une carte SPLAT! calée, ou None."""
+def coverage_for(image_path, recolor=None):
+    """(calque de couverture, GeoRef) d'une carte SPLAT! calée, ou None. `recolor` : fonction
+    QImage -> QImage appliquée à la carte (couleurs de la palette choisie)."""
     ref = basemap.georef_for(image_path)
     if ref is None:
         return None
     image = QImage(str(image_path))
-    return (basemap.coverage_layer(image), ref) if not image.isNull() else None
+    if image.isNull():
+        return None
+    return basemap.coverage_layer(recolor(image) if recolor else image), ref

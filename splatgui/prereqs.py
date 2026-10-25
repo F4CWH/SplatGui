@@ -373,6 +373,16 @@ def add_gnuplot_to_path_setting(extra_paths):
     return _path_with(extra_paths, gnuplot_bin(), first=False)
 
 
+def add_installed_to_path(extra_paths):
+    """Complète `extra_paths` ({arch: PATH}) par les DLL de deps/<arch> et par gnuplot/bin
+    s'ils sont installés (fenêtre Pré-requis ou installeur)."""
+    for arch in PE_MACHINES.values():
+        if any(dll_dir(arch).glob("*.dll")):
+            extra_paths[arch] = add_to_path_setting(extra_paths.get(arch, ""), arch)
+        if (gnuplot_bin() / "gnuplot.exe").is_file():
+            extra_paths[arch] = add_gnuplot_to_path_setting(extra_paths.get(arch, ""))
+
+
 def install_gnuplot(log, cancel=lambda: False):
     """Télécharge la distribution Windows de gnuplot et l'installe dans gnuplot/ (remplace
     une installation précédente). Renvoie le chemin de gnuplot.exe."""

@@ -3,6 +3,14 @@
 ;
 ; Installation par utilisateur (%LOCALAPPDATA%\Programs\SPLAT!Gui), sans droits administrateur :
 ; l'application écrit ses données (réglages, résultats, relief, DLL…) à côté de l'exécutable.
+;
+; Deux éditions, de même AppId (l'une peut remplacer l'autre) :
+;   - SPLAT!Gui-Setup-<version>.exe : l'application seule (SPLAT! s'installe ensuite par la
+;     fenêtre Pré-requis) ;
+;   - SPLAT!Gui-Setup-<version>-complet.exe (ISCC /DComplet) : avec les exécutables SPLAT! x64 et
+;     x86, leurs DLL MSYS2 / MinGW et gnuplot, pris dans le dossier du projet (bin\, deps\ et
+;     gnuplot\, tels que les installe la fenêtre Pré-requis). Code source de ces exécutables
+;     (GNU GPL v2) : https://github.com/F4CWH/splat
 
 #ifndef AppVersion
   #define AppVersion "1.2.1"
@@ -28,7 +36,11 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist
+#ifdef Complet
+OutputBaseFilename=SPLAT!Gui-Setup-{#AppVersion}-complet
+#else
 OutputBaseFilename=SPLAT!Gui-Setup-{#AppVersion}
+#endif
 SetupIconFile=..\icons\splat_icon.ico
 ; SPLAT! et SPLAT!Gui : GNU GPL version 2 ou ultérieure (texte à accepter avant l'installation).
 LicenseFile=..\LICENSE
@@ -52,10 +64,23 @@ Source: "{#DistDir}\geojson\*"; DestDir: "{app}\geojson"; Flags: ignoreversion r
 Source: "{#DistDir}\icons\*"; DestDir: "{app}\icons"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 ; Bibliothèque d'antennes : modèles fournis, sans écraser ceux que l'utilisateur a modifiés.
 Source: "{#DistDir}\antennas\*"; DestDir: "{app}\antennas"; Flags: onlyifdoesntexist recursesubdirs createallsubdirs skipifsourcedoesntexist
+#ifdef Complet
+; SPLAT! et ses DLL : deps\<arch> et gnuplot\bin sont ajoutés au PATH d'exécution par l'application
+; au démarrage suivant (install.json).
+Source: "..\bin\x64\*"; DestDir: "{app}\bin\x64"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\deps\x64\*.dll"; DestDir: "{app}\deps\x64"; Flags: ignoreversion
+Source: "..\bin\x86\*"; DestDir: "{app}\bin\x86"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\deps\x86\*.dll"; DestDir: "{app}\deps\x86"; Flags: ignoreversion
+Source: "..\gnuplot\*"; DestDir: "{app}\gnuplot"; Flags: ignoreversion recursesubdirs createallsubdirs
+#endif
 
 [InstallDelete]
 ; Mise à jour : bibliothèques de la version précédente (modules supprimés ou renommés).
 Type: filesandordirs; Name: "{app}\lib"
+#ifdef Complet
+; gnuplot d'une version précédente (installé par l'assistant ou par la fenêtre Pré-requis).
+Type: filesandordirs; Name: "{app}\gnuplot"
+#endif
 ; Exécutable des versions 1.1.0 et antérieures (renommé SPLAT!Gui.exe).
 Type: files; Name: "{app}\SplatGui.exe"
 ; Raccourcis « Splat!Gui » des versions précédentes : supprimés pour être recréés sous le nom SPLAT!Gui.

@@ -14,7 +14,7 @@ import struct
 import unicodedata
 from pathlib import Path
 
-from . import antennas, dem, terrain
+from . import antennas, coverpal, dem, terrain
 from .storage import BIN_DIR, PROJECT_DIR
 from .i18n import N_, tr
 
@@ -23,7 +23,7 @@ VARIANTS = {"standard": N_("Standard (3\" d'arc)"), "hd": N_("HD (1\" d'arc)")}
 MODES = {
     "p2p": N_("Liaison point à point"),
     "coverage": N_("Couverture visuelle (LOS) (-c)"),
-    "pathloss": N_("Couverture régionale / Champ (-L)"),
+    "pathloss": N_("Couverture RF / Champ (-L)"),
 }
 CLIMATES = {
     1: N_("1 – Équatorial"),
@@ -390,8 +390,13 @@ def prepare_run(params, settings, profile_name):
     run_dir.mkdir(parents=True)
 
     tx_bases, rx_base = site_file_bases(params)
+    # Couleurs des contours -L (sans fichier, SPLAT! écrit et utilise les siennes).
+    key = settings.get("coverage_palette", coverpal.DEFAULT)
+    palette = coverpal.palette_of(key, settings) if key else None
     tx_files = []
     for base, site in zip(tx_bases, params["tx_sites"]):
+        if params["mode"] == "pathloss" and palette:
+            coverpal.write_files(run_dir, base, palette)
         (run_dir / f"{base}.qth").write_text(qth_text(site), encoding="latin-1", errors="replace")
         if params["lrp"]["enabled"]:
             (run_dir / f"{base}.lrp").write_text(lrp_text(params["lrp"]), encoding="ascii")

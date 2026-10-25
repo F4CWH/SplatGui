@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
 )
 
 from . import (
-    CREDITS, LICENSE_SHORT, SOURCE_URL, __version__, antenna_ui, antennas, basemap, cables, dem, demimport, dted, googleearth, help, hillshade, i18n, layers, layout, linkprofile, livemap, mappicker, palettes, panorama, prereqs,
+    CREDITS, LICENSE_SHORT, SOURCE_URL, __version__, antenna_ui, antennas, basemap, cables, coverpal, coverpal_ui, dem, demimport, dted, googleearth, help, hillshade, i18n, layers, layout, linkprofile, livemap, mappicker, palettes, panorama, prereqs,
     sites, splat, storage, terrain, themes,
 )
 from .widgets import FileList, HorizontalScroll, ImageView, PathEdit, SliderValue, graduate
@@ -101,7 +101,8 @@ def scrollable(widget):
     """Onglet défilant verticalement, ajusté à la largeur disponible : les intitulés des
     formulaires passent au-dessus de leur champ quand la place manque, et les listes déroulantes
     ne fixent pas la largeur de la colonne (une dizaine de caractères au minimum, texte complet
-    dans la liste dépliée)."""
+    dans la liste dépliée). Plus étroit que son contenu (colonne réduite, Affichage → « Autoriser
+    la réduction… ») : défilement horizontal."""
     for form in widget.findChildren(QFormLayout):
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
     for combo in widget.findChildren(QComboBox):
@@ -118,7 +119,7 @@ def scrollable(widget):
     area.setWidgetResizable(True)
     area.setWidget(widget)
     area.setFrameShape(QScrollArea.Shape.NoFrame)
-    area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
     return area
 
 
@@ -836,13 +837,7 @@ class PrereqDialog(QDialog):
             self._log(tr("Annulé.\n"))
         else:
             # Les DLL installées dans deps/<arch> sont ajoutées au PATH d'exécution.
-            for arch in splat.ARCHES:
-                if any(prereqs.dll_dir(arch).glob("*.dll")):
-                    extra = self.settings["extra_paths"].get(arch, "")
-                    self.settings["extra_paths"][arch] = prereqs.add_to_path_setting(extra, arch)
-                if (prereqs.gnuplot_bin() / "gnuplot.exe").is_file():
-                    extra = self.settings["extra_paths"].get(arch, "")
-                    self.settings["extra_paths"][arch] = prereqs.add_gnuplot_to_path_setting(extra)
+            prereqs.add_installed_to_path(self.settings["extra_paths"])
             storage.save_settings(self.settings)
             self._log(tr("Terminé.\n"))
         self._refresh()
@@ -1065,6 +1060,7 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction(tr("Ouvrir le dossier des résultats"), self.open_runs_dir)
         file_menu.addAction(tr("Modèles d'antennes…"), self.manage_antennas)
+        file_menu.addAction(tr("Palettes de couleurs…"), self.manage_coverage_palettes)
         file_menu.addAction(tr("Réglages…"), self.edit_settings)
         file_menu.addAction(tr("Autres données d'entrée…"), self.show_input_dialog)
         file_menu.addAction(tr("Pré-requis (SPLAT!, DLL, gnuplot)…"), self.manage_prereqs)
@@ -1088,6 +1084,13 @@ class MainWindow(QMainWindow):
             action.setCheckable(True)
             action.setChecked(code == current)
             group.addAction(action)
+        view_menu.addSeparator()
+        action = view_menu.addAction(tr("Autoriser la réduction de la colonne des paramètres"))
+        action.setToolTip(tr("Permet de rendre la colonne de gauche plus étroite que ses onglets "
+                             "(les onglets défilent alors avec des flèches)"))
+        action.setCheckable(True)
+        action.setChecked(bool(self.settings.get("params_panel_shrink", False)))
+        action.toggled.connect(self.set_params_shrink)
 
         help_menu = menu.addMenu(tr("&Aide"))
         help_action = help_menu.addAction(tr("Aide de SPLAT!…"), self.show_help)
@@ -1152,6 +1155,7 @@ class MainWindow(QMainWindow):
         # Paramètres : 1/3 de la largeur, résultats : 2/3.
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 2)
+        splitter.setCollapsible(0, False)       # jamais masquée en tirant le séparateur
         splitter.setSizes([1000, 2000])
         self.setCentralWidget(splitter)
 
@@ -1162,9 +1166,10 @@ class MainWindow(QMainWindow):
             splitter = getattr(self, name, None)
             if isinstance(splitter, QSplitter) and isinstance(state, str):
                 splitter.restoreState(QByteArray.fromBase64(state.encode()))
-        # Colonne des paramètres écrasée (largeur minimale des résultats trop grande) : proportions par défaut
+        # Colonne des paramètres écrasée (largeur minimale des résultats trop grande) : proportions par
+        # défaut, sauf si l'utilisateur a autorisé sa réduction.
         sizes = self.main_splitter.sizes()
-        if sum(sizes) and sizes[0] < 0.2 * sum(sizes):
+        if sum(sizes) and sizes[0] < 0.2 * sum(sizes) and not self.settings.get("params_panel_shrink"):
             self.main_splitter.setSizes([sum(sizes) // 3, sum(sizes) - sum(sizes) // 3])
 
     def _build_params_panel(self):
@@ -1187,13 +1192,34 @@ class MainWindow(QMainWindow):
         self.preview.setFont(mono_font())
         self.preview.setMaximumHeight(60)
 
-        panel = QWidget()
+        self.params_panel = panel = QWidget()
+        # Largeur minimale : tous les onglets visibles, sans flèches de défilement ni noms tronqués,
+        # et le contenu de chacun sans défilement horizontal (sauf si Affichage → « Autoriser la
+        # réduction de la colonne des paramètres »).
+        tabs.setElideMode(Qt.TextElideMode.ElideNone)
+        style = tabs.style()
+        frame = 2 * style.pixelMetric(style.PixelMetric.PM_DefaultFrameWidth) + 4
+        content = max(tabs.widget(i).widget().minimumSizeHint().width() for i in range(tabs.count()))
+        self.params_min_width = max(tabs.tabBar().sizeHint().width(),
+                                    content + style.pixelMetric(style.PixelMetric.PM_ScrollBarExtent)) + frame
+        self._apply_params_shrink()
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(tabs, 1)
         layout.addWidget(QLabel(tr("Ligne de commande :")))
         layout.addWidget(self.preview)
         return panel
+
+    def _apply_params_shrink(self):
+        """Largeur minimale de la colonne des paramètres : celle de ses onglets, ou aucune si
+        la réduction est autorisée (onglets alors défilants)."""
+        shrink = bool(self.settings.get("params_panel_shrink", False))
+        self.params_panel.setMinimumWidth(0 if shrink else self.params_min_width)
+
+    def set_params_shrink(self, enabled):
+        self.settings["params_panel_shrink"] = enabled
+        storage.save_settings(self.settings)
+        self._apply_params_shrink()
 
     def _build_analysis_tab(self):
         page = QWidget()
@@ -1336,7 +1362,7 @@ class MainWindow(QMainWindow):
         buttons.addStretch()
         layout.addLayout(buttons)
 
-        note = QLabel(tr("SPLAT! applique le diagramme en couverture régionale / champ (-L) et en point à point ; "
+        note = QLabel(tr("SPLAT! applique le diagramme en couverture RF / champ (-L) et en point à point ; "
                       "la couverture visuelle (LOS) (-c) l'ignore. La PAR doit inclure le gain de l'antenne."))
         note.setWordWrap(True)
         note.setStyleSheet("color: gray;")
@@ -1886,6 +1912,8 @@ class MainWindow(QMainWindow):
         top = QHBoxLayout()
         self.image_combo = QComboBox()
         self.image_combo.currentIndexChanged.connect(self._show_image)
+        self.image_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.image_combo.setMinimumContentsLength(16)
         top.addWidget(self.image_combo, 1)
         self.image_view = ImageView()
         for text, slot in ((N_("Ajuster"), self.image_view.fit), ("100 %", self.image_view.actual_size),
@@ -1900,6 +1928,23 @@ class MainWindow(QMainWindow):
         self.image_view.contextRequested.connect(self._map_context_menu)
         il.addLayout(top)
         il.addWidget(HorizontalScroll(self._build_overlay_bar()))     # ne bloque pas la largeur du panneau
+        # Liste des images au quart de l'espace libre de la ligne, le reste aux actions sur la carte.
+        top.addStretch(3)
+        # Palette des cartes de couverture RF (-L), partagée avec Fichier → Palettes de couleurs….
+        top.addWidget(QLabel(tr("Palette (-L) :")))
+        self.palette_combo = QComboBox()
+        self.palette_combo.setIconSize(QSize(60, 12))
+        self.palette_combo.setToolTip(tr("Couleurs des contours des cartes de couverture RF (-L), appliquées "
+                                         "au prochain calcul"))
+        self._fill_palette_combo()
+        self.palette_combo.currentIndexChanged.connect(self._palette_combo_changed)
+        top.addWidget(self.palette_combo)
+        palettes_button = QPushButton("…")
+        palettes_button.setFixedWidth(28)
+        palettes_button.setToolTip(tr("Palettes de couleurs : créer, modifier ou supprimer une palette"))
+        palettes_button.clicked.connect(self.manage_coverage_palettes)
+        top.addWidget(palettes_button)
+        top.addWidget(self.map_actions)
         # Carte | panneau des couches : séparateur déplaçable (panneau repliable vers la droite).
         self.map_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.live_map = livemap.LiveMap()
@@ -3296,13 +3341,16 @@ class MainWindow(QMainWindow):
         palette = self.pano_palette.currentData()
         coverage = self._panorama_coverage_image(key[0]) if self.pano_coverage.isChecked() else None
         source = self.pano_drape.currentData()
-        tkey = (key, palette if not source else "", str(coverage), source)
+        coverage_palette = self._map_palette() if coverage else None
+        tkey = (key, palette if not source else "", str(coverage), source,
+                self.settings.get("coverage_palette", coverpal.DEFAULT) if coverage else "")
         if tkey in self.pano_textures3d:
             self.pano_view3d.set_texture(self.pano_textures3d[tkey])
             return
 
         def build():
-            layer = panorama3d.coverage_for(coverage) if coverage else None
+            layer = panorama3d.coverage_for(coverage, lambda image: layout.recolor_map(
+                image, coverage.parent, coverage_palette)) if coverage else None
             drape = panorama3d.drape_for(mesh, source) if source else None
             return panorama3d.build_texture(mesh, palette, layer, drape)
 
@@ -3352,25 +3400,32 @@ class MainWindow(QMainWindow):
             except OSError as exc:
                 self.report_view.setPlainText(str(exc))
 
+    def _set_overlay_enabled(self, enabled):
+        """Options et actions de superposition : seulement pour une carte SPLAT! calée."""
+        self.overlay_bar.setEnabled(enabled)
+        self.map_actions.setEnabled(enabled)
+
     def _show_image(self, index):
         path = self.image_combo.itemData(index)
         self.full_image = self.full_ref = None
         self.current_image = self.current_ref = self.current_coverage = None
         if not path:
-            self.overlay_bar.setEnabled(False)
+            self._set_overlay_enabled(False)
             return
         image = QImage(path)
         if image.isNull():
             self.image_view.clear()
             self.image_info.setText(tr("Format non affichable — utilisez « Ouvrir »."))
-            self.overlay_bar.setEnabled(False)
+            self._set_overlay_enabled(False)
             return
         self.full_ref = basemap.georef_for(path)
         self.current_sites = sites.run_sites(Path(path).parent) if self.full_ref else []
         if self.full_ref and self.current_sites and self.hide_marks.isChecked():
             image, _removed = sites.remove_splat_marks(image, self.full_ref, self.current_sites)
+        if self.full_ref:
+            image = layout.recolor_map(image, Path(path).parent, self._map_palette())
         self.full_image = image
-        self.overlay_bar.setEnabled(self.full_ref is not None)
+        self._set_overlay_enabled(self.full_ref is not None)
         self._set_view_region()
         self._apply_overlay(refit=True)
 
@@ -3454,7 +3509,7 @@ class MainWindow(QMainWindow):
             notes.append(tr("Calcul : SPLAT! — carte : SPLAT!Gui"))
         return layout.legend_entries(Path(self.image_combo.currentData()).parent, coverage,
                                      self.current_sites, site_icons, checked_layers, notes,
-                                     self.coverage_check.isChecked())
+                                     self.coverage_check.isChecked(), self._map_palette())
 
     # ---- Carte en ligne ----------------------------------------------------
 
@@ -3517,9 +3572,10 @@ class MainWindow(QMainWindow):
         image, ref, path = self.full_image, self.full_ref, self.image_combo.currentData()
         if image is None or ref is None or not path:
             return None
-        if self._level_lookup[0] != path:
+        key = (path, self.settings.get("coverage_palette", coverpal.DEFAULT))
+        if self._level_lookup[0] != key:
             tx_sites = [site for site in self.current_sites if site["role"] == "tx"]
-            self._level_lookup = (path, layout.level_lookup(Path(path).parent, tx_sites))
+            self._level_lookup = (key, layout.level_lookup(Path(path).parent, tx_sites, self._map_palette()))
         lookup = self._level_lookup[1]
         if lookup is None:
             return None
@@ -3763,30 +3819,33 @@ class MainWindow(QMainWindow):
         row2.addWidget(SliderValue(self.coverage_blur, "{:g} px", scale=2))
         self.coverage_blur.valueChanged.connect(lambda v: (self.coverage_blur.setToolTip(
             tr("Flou de la couverture : {v:g} pixel(s) SPLAT!", v=v / 2)), self._overlay_timer.start()))
+        # Actions sur la carte : placées dans la ligne du choix de l'image (voir _build_results_panel).
+        self.map_actions = QWidget()
+        actions = QHBoxLayout(self.map_actions)
+        actions.setContentsMargins(0, 0, 0, 0)
         self.recenter_button = QPushButton(tr("Recentrer"))
         self.recenter_button.clicked.connect(lambda: self._update_live_map(refit=True))
-        row2.addWidget(self.recenter_button)
+        actions.addWidget(self.recenter_button)
         self.browser_button = QPushButton(tr("Ouvrir dans le navigateur"))
         self.browser_button.setToolTip(tr("Page web interactive (Leaflet) : fonds OSM / IGN en ligne, "
                                        "estompage du relief, couverture, sites et légende"))
         self.browser_button.clicked.connect(self._open_in_browser)
-        row2.addWidget(self.browser_button)
-        row2.addStretch()
+        actions.addWidget(self.browser_button)
         self.export_button = QPushButton(tr("Exporter l'image…"))
         self.export_button.clicked.connect(self._export_overlay)
-        row2.addWidget(self.export_button)
+        actions.addWidget(self.export_button)
         self.kml_button = QPushButton(tr("Google Earth…"))
         self.kml_button.setToolTip(tr("Exporter la couverture, les sites, les calques et la légende "
                                    "pour Google Earth (.kmz ou .kml)"))
         self.kml_button.clicked.connect(self._export_kml)
-        row2.addWidget(self.kml_button)
+        actions.addWidget(self.kml_button)
         self.relief_source.currentIndexChanged.connect(lambda _i: self._overlay_timer.start())
         self.relief_opacity.valueChanged.connect(lambda _v: self._overlay_timer.start())
         self.contour_check.toggled.connect(lambda _c: self._overlay_timer.start())
         self.display_mode.currentIndexChanged.connect(self._display_mode_changed)
         self.live_key = None
         self.live_coverage = None
-        self.overlay_bar.setEnabled(False)
+        self._set_overlay_enabled(False)
 
         self.full_image = None
         self.full_ref = None
@@ -4456,6 +4515,44 @@ class MainWindow(QMainWindow):
             storage.save_settings(self.settings)
             self.live_map.srtm_url = self.settings.get("srtm_url") or terrain.DEFAULT_URL
 
+    def manage_coverage_palettes(self):
+        dialog = coverpal_ui.PaletteDialog(self.settings, self)
+        if dialog.exec():
+            self.settings.update(dialog.values())
+            storage.save_settings(self.settings)
+            self._fill_palette_combo()
+            self._map_palette_changed()
+
+    def _fill_palette_combo(self):
+        """Liste des palettes (fournies puis personnelles), sur la palette des réglages."""
+        combo = self.palette_combo
+        combo.blockSignals(True)
+        combo.clear()
+        current = self.settings.get("coverage_palette", coverpal.DEFAULT)
+        for key, label, palette in coverpal.choices(self.settings):
+            combo.addItem(QIcon(coverpal_ui.strip_pixmap(palette, QSize(60, 12))), label, key)
+        combo.setCurrentIndex(max(0, combo.findData(current)))
+        combo.blockSignals(False)
+
+    def _palette_combo_changed(self, _index):
+        self.settings["coverage_palette"] = self.palette_combo.currentData()
+        storage.save_settings(self.settings)
+        self.statusBar().showMessage(tr("Palette « {name} » : carte affichée recoloriée, appliquée au prochain "
+                                        "calcul de couverture RF (-L).", name=self.palette_combo.currentText()), 8000)
+        self._map_palette_changed()
+
+    def _map_palette(self):
+        """Palette des cartes -L affichées (None si la palette choisie n'existe plus)."""
+        return coverpal.palette_of(self.settings.get("coverage_palette", coverpal.DEFAULT), self.settings)
+
+    def _map_palette_changed(self):
+        """Carte affichée, légende et niveaux au survol recoloriés, vue 3D comprise."""
+        self.live_coverage = self.coverage_display_cache = None
+        self._level_lookup = (None, None)
+        if self.image_combo.currentData():
+            self._show_image(self.image_combo.currentIndex())
+        self._load_panorama_texture3d()
+
     def _style_progress(self):
         """Barre bleu moyen sur la piste du thème ; texte blanc cerné de sombre, lisible partout."""
         palette = QApplication.palette()
@@ -4736,7 +4833,10 @@ def main():
     app.setStyle("Fusion")
     app.setWindowIcon(app_icon())
     settings = storage.load_settings()
-    storage.apply_install_paths(settings)
+    if storage.apply_install_paths(settings):
+        # DLL et gnuplot éventuellement installés par l'assistant : ajoutés au PATH d'exécution.
+        prereqs.add_installed_to_path(settings["extra_paths"])
+        storage.save_settings(settings)
     i18n.set_language(settings.get("language", ""), app)
     themes.apply(settings.get("theme", themes.DEFAULT), app)
     from .splash import Splash
