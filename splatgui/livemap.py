@@ -8,10 +8,14 @@ La carte SPLAT! (degrés : plate carrée) est reprojetée en Web Mercator par ba
 Une page web Leaflet équivalente peut être produite pour le navigateur.
 """
 
+import functools
 import html
+import http.server
 import json
 import math
 import shutil
+import threading
+import urllib.parse
 from pathlib import Path
 
 from concurrent.futures import ThreadPoolExecutor
@@ -641,3 +645,25 @@ map.fitBounds([[{v_south}, {v_west}], [{v_north}, {v_east}]]);
     path = folder / "index.html"
     path.write_text(page, encoding="utf-8")
     return path
+
+
+_servers = {}          # dossier → serveur HTTP local (un par dossier, jusqu'à la fermeture)
+
+
+def page_url(page):
+    """URL http://127.0.0.1:<port>/… de la page web, servie localement. Ouverte en file://, elle
+    n'envoie pas d'en-tête Referer et les serveurs de tuiles OSM la refusent (erreur 403)."""
+    page = Path(page)
+    folder = page.parent.resolve()
+    server = _servers.get(folder)
+    if server is None:
+        handler = functools.partial(_QuietHandler, directory=str(folder))
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        _servers[folder] = server
+    return f"http://127.0.0.1:{server.server_address[1]}/{urllib.parse.quote(page.name)}"
+
+
+class _QuietHandler(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, *_args):      # pas de journal sur la console
+        pass

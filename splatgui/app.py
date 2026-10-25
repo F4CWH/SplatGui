@@ -3666,7 +3666,7 @@ class MainWindow(QMainWindow):
                                        base, relief, opacity, title, vectors, srtm, view_ref, contours)
 
         def done(page):
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(page)))
+            QDesktopServices.openUrl(QUrl(livemap.page_url(page)))     # http local : tuiles OSM acceptées
             self.overlay_status.setText(tr("Page web écrite : {page}", page=page))
             self.browser_button.setEnabled(True)
 
@@ -4530,7 +4530,11 @@ class MainWindow(QMainWindow):
         combo.clear()
         current = self.settings.get("coverage_palette", coverpal.DEFAULT)
         for key, label, palette in coverpal.choices(self.settings):
-            combo.addItem(QIcon(coverpal_ui.strip_pixmap(palette, QSize(60, 12))), label, key)
+            # Palettes fournies : nom seul (sans la description entre parenthèses), pour laisser
+            # de la place aux boutons de la ligne ; libellé complet en info-bulle.
+            short = label if key.startswith(coverpal.USER_PREFIX) else label.split(" (")[0]
+            combo.addItem(QIcon(coverpal_ui.strip_pixmap(palette, QSize(60, 12))), short, key)
+            combo.setItemData(combo.count() - 1, label, Qt.ItemDataRole.ToolTipRole)
         combo.setCurrentIndex(max(0, combo.findData(current)))
         combo.blockSignals(False)
 
