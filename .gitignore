@@ -24,3 +24,6 @@
 /build/
 /dist/
 /portable/
+
+# Cache de Python (fichiers .pyc compilés automatiquement)
+__pycache__/
