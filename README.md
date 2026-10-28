@@ -1,12 +1,14 @@
 # SPLAT!Gui
 
-Interface graphique Windows pour **[SPLAT!](https://www.qsl.net/kd2bd/splat.html)** (*Signal Propagation, Loss, And Terrain*), l'outil d'analyse de propagation radio et de relief de John A. Magliacane, KD2BD, pour les fréquences de 20 MHz à 20 GHz.
+Interface graphique Windows et Linux pour **[SPLAT!](https://www.qsl.net/kd2bd/splat.html)** (*Signal Propagation, Loss, And Terrain*), l'outil d'analyse de propagation radio et de relief de John A. Magliacane, KD2BD, pour les fréquences de 20 MHz à 20 GHz.
 
 NB: cette interface a été développée avec l'aide de l'IA "Claude".
 
 SPLAT!Gui prépare les fichiers d'entrée de SPLAT! (sites `.qth`, paramètres ITM `.lrp`, diagrammes d'antenne `.az` / `.el`). Il télécharge et convertit le relief SRTM, lance le calcul, puis affiche les rapports et les cartes de couverture, y compris sur un fond OpenStreetMap ou IGN.
 
 Code source : <https://github.com/F4CWH/SplatGui>
+
+Version actuelle : **1.6.0**, [notes de version et téléchargements](https://github.com/F4CWH/SplatGui/releases/tag/v1.6.0). Nouveauté de la 1.6.0 : prise en charge de Linux (Debian, Ubuntu) avec le paquet `splat` de la distribution ; voir [Linux (Debian, Ubuntu)](#linux-debian-ubuntu) et [Compilation](#compilation).
 
 Un peu d'histoire : <https://udel.edu/~mm/itm>...
 
@@ -54,10 +56,13 @@ Un peu d'histoire : <https://udel.edu/~mm/itm>...
 
 ## Installation
 
-Deux installeurs sont proposés dans les releases :
+Les [releases](https://github.com/F4CWH/SplatGui/releases) proposent, pour Windows, deux installeurs et une version portable :
 
 - `SPLAT!Gui-Setup-<version>-complet.exe` : SPLAT!Gui avec les exécutables Windows de SPLAT! x64 et x86 (`splat.exe`, `splat-hd.exe`, utilitaires), leurs DLL d'exécution MSYS2 / MinGW et gnuplot. Tout est prêt dès le premier démarrage ;
-- `SPLAT!Gui-Setup-<version>.exe` : SPLAT!Gui seul. SPLAT!, ses DLL et gnuplot s'installent ensuite depuis l'application (voir plus bas).
+- `SPLAT!Gui-Setup-<version>.exe` : SPLAT!Gui seul. SPLAT!, ses DLL et gnuplot s'installent ensuite depuis l'application (voir plus bas) ;
+- `SPLAT.Gui-v<version>_portable.zip` : version portable, sans installation (décompresser puis lancer `SPLAT!Gui.exe`).
+
+Sous Linux, aucune version compilée n'est encore fournie : SPLAT!Gui se lance depuis les sources (voir [Linux (Debian, Ubuntu)](#linux-debian-ubuntu)) ou se compile avec `installer/build_linux.sh` (voir [Compilation](#compilation)).
 
 Les deux installeurs mettent à jour la même installation : on peut passer de l'un à l'autre. L'installation se fait par utilisateur (`%LOCALAPPDATA%\Programs\SPLAT!Gui`), sans droits administrateur. L'assistant permet de choisir :
 
