@@ -45,6 +45,8 @@ DEFAULT_PROFILE = "Défaut"
 
 def _default_extra_paths():
     """Dossiers ajoutés au PATH pour trouver les DLL et gnuplot, par architecture."""
+    if os.name != "nt":
+        return {"x64": ""}          # paquets de la distribution, déjà dans le PATH
     x64 = [p for p in (r"C:\msys64\usr\bin", r"C:\msys64\mingw64\bin") if Path(p).is_dir()]
     x86 = [p for p in (r"C:\msys64\mingw32\bin",) if Path(p).is_dir()]
     return {"x64": ";".join(x64), "x86": ";".join(x86)}

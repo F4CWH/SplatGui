@@ -14,11 +14,14 @@ import struct
 import unicodedata
 from pathlib import Path
 
-from . import antennas, coverpal, dem, terrain
+from . import antennas, coverpal, dem, system, terrain
 from .storage import BIN_DIR, PROJECT_DIR
 from .i18n import N_, tr
 
-ARCHES = {"x64": N_("x64 (64 bits)"), "x86": N_("x86 (32 bits)")}
+if system.WINDOWS:
+    ARCHES = {"x64": N_("x64 (64 bits)"), "x86": N_("x86 (32 bits)")}
+else:
+    ARCHES = {"x64": N_("Paquet splat du système")}       # voir system.py
 VARIANTS = {"standard": N_("Standard (3\" d'arc)"), "hd": N_("HD (1\" d'arc)")}
 MODES = {
     "p2p": N_("Liaison point à point"),
@@ -85,6 +88,11 @@ WIN_LOAD_ERRORS = {
     0xC000007B: N_("image invalide / mélange 32-64 bits (STATUS_INVALID_IMAGE_FORMAT)"),
     0xC0000142: N_("échec d'initialisation d'une DLL (STATUS_DLL_INIT_FAILED)"),
 }
+# Codes de retour du shell (Linux) lorsque la commande ne peut pas être lancée.
+SHELL_LOAD_ERRORS = {
+    126: N_("exécutable non exécutable (code 126)"),
+    127: N_("exécutable introuvable (code 127)"),
+}
 
 
 class ParamError(ValueError):
@@ -92,8 +100,11 @@ class ParamError(ValueError):
 
 
 def executable_path(arch, variant):
-    name = "splat-hd.exe" if variant == "hd" else "splat.exe"
-    return BIN_DIR / arch / name
+    name = "splat-hd" if variant == "hd" else "splat"
+    if system.WINDOWS:
+        return BIN_DIR / arch / system.program_name(name)
+    # Paquet de la distribution : /usr/bin/splat (chemin indicatif s'il est absent).
+    return system.find_program(name) or Path("/usr/bin") / name
 
 
 TOOLS_DIR = PROJECT_DIR / "tools"
@@ -120,8 +131,11 @@ def runnable_executable(exe):
 
     Les binaires fournis réservent 2 Mo de pile, ce qui provoque un débordement (SIGSEGV)
     pendant l'analyse point à point. Les originaux de bin/ ne sont pas modifiés ; la copie
-    est régénérée si l'original change."""
+    est régénérée si l'original change. Sous Linux, la pile est agrandie au lancement
+    (voir launch_command)."""
     exe = Path(exe)
+    if not system.WINDOWS:
+        return exe
     target = TOOLS_DIR / exe.parent.name / exe.name
     try:
         if not target.exists() or target.stat().st_mtime < exe.stat().st_mtime:
@@ -136,6 +150,17 @@ def runnable_executable(exe):
         return exe
 
 
+# Linux : pile de 256 Mo (ou le maximum autorisé) pour SPLAT!, puis exécution de la commande.
+STACK_SHELL = f'ulimit -s {STACK_RESERVE // 1024} 2>/dev/null || ulimit -s "$(ulimit -H -s)" 2>/dev/null'
+
+
+def launch_command(exe, args):
+    """(programme, arguments) à passer à QProcess pour lancer SPLAT!."""
+    if system.WINDOWS:
+        return str(exe), list(args)
+    return "/bin/sh", ["-c", STACK_SHELL + '; exec "$0" "$@"', str(exe), *args]
+
+
 def available_arches():
     return [a for a in ARCHES if executable_path(a, "standard").exists()
             or executable_path(a, "hd").exists()]
@@ -147,6 +172,8 @@ MSYS_SIGNALS = {4: "SIGILL", 6: "SIGABRT", 7: "SIGBUS", 8: "SIGFPE", 11: "SIGSEG
 
 def exit_code_problem(code):
     """Problème de chargement (DLL…) : l'exécutable n'a pas pu démarrer. Texte non traduit."""
+    if not system.WINDOWS:
+        return SHELL_LOAD_ERRORS.get(code)
     return WIN_LOAD_ERRORS.get(code & 0xFFFFFFFF)
 
 
@@ -156,8 +183,12 @@ def describe_exit_code(code):
     return tr(message) if message else None
 
 
-def crash_signal(code):
-    """Signal ayant arrêté SPLAT! en cours d'exécution, d'après la convention MSYS, ou None."""
+def crash_signal(code, crashed=False):
+    """Signal ayant arrêté SPLAT! en cours d'exécution, ou None. Windows : convention MSYS
+    (sortie normale, code = signal << 8) ; Linux : arrêt anormal (`crashed`), code = signal.
+    SIGKILL (arrêt demandé par l'utilisateur) n'est pas un plantage."""
+    if not system.WINDOWS:
+        return MSYS_SIGNALS.get(code) if crashed else None
     if code > 0 and code & 0xFF == 0 and (code >> 8) in MSYS_SIGNALS:
         return MSYS_SIGNALS[code >> 8]
     return None
@@ -350,7 +381,7 @@ def build_arguments(params, tx_files, rx_file):
     if params["log"]:
         args += ["-log", "commande.log"]
     if params["extra_args"].strip():
-        args += shlex.split(params["extra_args"], posix=False)
+        args += shlex.split(params["extra_args"], posix=not system.WINDOWS)
     return args
 
 
@@ -417,15 +448,24 @@ def prepare_run(params, settings, profile_name):
     args = build_arguments(params, tx_files, rx_file)
 
     env = os.environ.copy()
-    extra = settings.get("extra_paths", {}).get(params["arch"], "")
-    if extra.strip():
-        env["PATH"] = extra.strip().rstrip(";") + os.pathsep + env.get("PATH", "")
+    extra = system.join_paths(system.split_paths(settings.get("extra_paths", {}).get(params["arch"], "")))
+    env["PATH"] = system.prepend_path(extra, env.get("PATH", ""))
 
-    (run_dir / "commande.cmd").write_text(
-        f'@echo off\r\nset "PATH={extra.strip().rstrip(";")};%PATH%"\r\ncd /d "%~dp0"\r\n'
-        f'"{exe}" {" ".join(_quote(a) for a in args)}\r\n',
-        encoding="utf-8",
-    )
+    if system.WINDOWS:
+        (run_dir / COMMAND_FILE).write_text(
+            f'@echo off\r\nset "PATH={extra};%PATH%"\r\ncd /d "%~dp0"\r\n'
+            f'"{exe}" {" ".join(_quote(a) for a in args)}\r\n',
+            encoding="utf-8",
+        )
+    else:
+        script = run_dir / COMMAND_FILE
+        script.write_text(
+            "#!/bin/sh\n" + (f'PATH={shlex.quote(extra)}:"$PATH"\n' if extra else "")
+            + f'cd "$(dirname "$0")" || exit 1\n{STACK_SHELL}\n'
+            + f"exec {shlex.join([str(exe), *args])}\n",
+            encoding="utf-8",
+        )
+        script.chmod(0o755)
     return run_dir, exe, args, env
 
 
@@ -446,7 +486,8 @@ def command_preview(params):
 
 # --- Résultats -----------------------------------------------------------------
 
-INPUT_FILES = {"commande.cmd"}
+COMMAND_FILE = "commande.cmd" if system.WINDOWS else "commande.sh"   # commande rejouable
+INPUT_FILES = {"commande.cmd", "commande.sh"}
 
 
 def collect_outputs(run_dir):

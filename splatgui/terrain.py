@@ -22,6 +22,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+from . import system
 from .storage import BIN_DIR, PROJECT_DIR
 from .i18n import tr
 
@@ -93,7 +94,7 @@ def migrate_e000(path):
             shutil.copyfileobj(src, dst, 1 << 20)
         os.replace(partial, path)
         legacy.unlink()
-        hd_alias(legacy).unlink(missing_ok=True)       # alias « 47:48:359:360-hd.sdf » de splat-hd
+        tile_alias(legacy).unlink(missing_ok=True)     # alias « 47:48:359:360-hd.sdf » de splat-hd
     except OSError:
         partial.unlink(missing_ok=True)
         return False
@@ -102,25 +103,30 @@ def migrate_e000(path):
 
 # Le portage Windows de splat-hd.exe cherche « 48:49:357:358-hd.sdf » (le format standard a été
 # corrigé en « _ », pas le format HD) ; sous MSYS, le « : » d'un nom de fichier devient U+F03A.
-MSYS_COLON = ""
+# Le SPLAT! d'origine (paquet Linux) cherche « 48:49:357:358.sdf » et « …-hd.sdf », avec de vrais « : ».
+MSYS_COLON = "\uf03a"
+ALIAS_COLON = MSYS_COLON if system.WINDOWS else ":"
 
 
-def hd_alias(path):
-    """Nom sous lequel splat-hd.exe cherche une tuile HD « …-hd.sdf »."""
+def tile_alias(path):
+    """Nom sous lequel SPLAT! cherche une tuile « 48_49_357_358[-hd].sdf »."""
     path = Path(path)
-    return path.with_name(path.name.replace("_", MSYS_COLON))
+    return path.with_name(path.name.replace("_", ALIAS_COLON))
 
 
-def link_hd_aliases(folder):
-    """Donne à chaque tuile « *-hd.sdf » de `folder` le nom attendu par splat-hd.exe (lien
-    physique, sinon copie). Renvoie les erreurs (liste de messages)."""
+def link_tile_aliases(folder, hd):
+    """Donne à chaque tuile de `folder` le nom attendu par SPLAT! (lien physique, sinon copie) :
+    tuiles HD seulement sous Windows, toutes sous Linux. Renvoie les erreurs (liste de messages)."""
+    if system.WINDOWS and not hd:
+        return []
     try:
-        paths = [p for p in Path(folder).glob("*-hd.sdf") if "_" in p.name]
+        paths = [p for p in Path(folder).glob("*-hd.sdf" if hd else "*.sdf")
+                 if "_" in p.name and p.name.endswith("-hd.sdf") == hd]
     except OSError:
         return []
     errors = []
     for path in paths:
-        alias = hd_alias(path)
+        alias = tile_alias(path)
         try:
             if alias.exists():
                 if os.path.samefile(path, alias):
@@ -292,6 +298,8 @@ def download(tile, url_template, log, cancel):
 
 def converter_candidates(arch, extra_paths, hd):
     """Exécutables srtm2sdf utilisables, par ordre de préférence : (exe, env)."""
+    if not system.WINDOWS:
+        return _linux_converters(extra_paths.get(arch, "") if extra_paths else "", hd)
     order = [arch] + [a for a in ("x64", "x86") if a != arch]
     result = []
     for candidate_arch in order:
@@ -306,11 +314,29 @@ def converter_candidates(arch, extra_paths, hd):
         if not exe.exists():
             continue
         env = os.environ.copy()
-        extra = (extra_paths or {}).get(candidate_arch, "").strip().rstrip(";")
-        if extra:
-            env["PATH"] = extra + os.pathsep + env.get("PATH", "")
+        env["PATH"] = system.prepend_path((extra_paths or {}).get(candidate_arch, ""), env.get("PATH", ""))
         result.append((exe, env))
     return result
+
+
+def _linux_converters(extra, hd):
+    """srtm2sdf du paquet de la distribution (srtm2sdf-hd : lien symbolique créé au besoin,
+    srtm2sdf choisissant le mode HD d'après son propre nom)."""
+    exe = system.find_program("srtm2sdf-hd" if hd else "srtm2sdf", extra)
+    if exe is None and hd and (base := system.find_program("srtm2sdf", extra)):
+        exe = TOOLS_DIR / "srtm2sdf-hd"
+        try:
+            if not exe.exists():
+                exe.parent.mkdir(parents=True, exist_ok=True)
+                exe.unlink(missing_ok=True)         # lien cassé (paquet déplacé)
+                exe.symlink_to(base)
+        except OSError:
+            exe = None
+    if exe is None:
+        return []
+    env = os.environ.copy()
+    env["PATH"] = system.prepend_path(extra, env.get("PATH", ""))
+    return [(exe, env)]
 
 
 def convert(tile, srtm_path, hd, sdf_dir, converters, log, cancel):

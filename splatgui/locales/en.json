@@ -689,7 +689,7 @@
  "Hors de la zone couverte par l'IGN : Copernicus.": "Outside the IGN coverage area: Copernicus.",
  "Sursol retiré à l'emplacement des sites : {name}": "Clutter removed at the sites: {name}",
  "Pas de données (mer).": "No data (sea).",
- "Alias de tuile HD impossible : {error}\n": "HD tile alias failed: {error}\n",
+ "Alias de tuile impossible : {error}\n": "Tile alias failed: {error}\n",
  "Relief {name} impossible : {exc}": "Terrain {name} unavailable: {exc}",
  "Visibilité directe, Fresnel partiellement obstruée": "Line of sight, Fresnel zone partly obstructed",
  "Visibilité obstruée": "Line of sight obstructed",
@@ -934,5 +934,14 @@
  "Palette (-L) :": "Palette (-L):",
  "Couleurs des contours des cartes de couverture RF (-L), appliquées au prochain calcul": "Contour colours of RF coverage maps (-L), applied to the next run",
  "Palettes de couleurs : créer, modifier ou supprimer une palette": "Colour palettes: create, edit or delete a palette",
- "Palette « {name} » : carte affichée recoloriée, appliquée au prochain calcul de couverture RF (-L).": "Palette “{name}”: displayed map recoloured, applied to the next RF coverage run (-L)."
+ "Palette « {name} » : carte affichée recoloriée, appliquée au prochain calcul de couverture RF (-L).": "Palette “{name}”: displayed map recoloured, applied to the next RF coverage run (-L).",
+ "Paquet splat du système": "System splat package",
+ "exécutable non exécutable (code 126)": "file is not executable (code 126)",
+ "exécutable introuvable (code 127)": "executable not found (code 127)",
+ "Absent(s) : {programs} ({command})": "Missing: {programs} ({command})",
+ "Dossiers ajoutés au PATH lors de l'exécution (séparés par « : »), par exemple pour un gnuplot installé hors des dossiers standard. SPLAT! et srtm2sdf viennent du paquet splat de la distribution : {command}": "Folders added to the PATH when running (separated by “:”), for example for a gnuplot installed outside the standard folders. SPLAT! and srtm2sdf come from the distribution's splat package: {command}",
+ "Pré-requis (SPLAT!, gnuplot)…": "Prerequisites (SPLAT!, gnuplot)…",
+ "\n*** SPLAT! n'a pas pu démarrer : {problem}.\nInstallez le paquet splat ({command}) ou vérifiez le PATH (menu Fichier > Pré-requis…, ou Réglages…, bouton « Tester »).\n": "\n*** SPLAT! could not start: {problem}.\nInstall the splat package ({command}) or check the PATH (File > Prerequisites… menu, or Settings…, “Test” button).\n",
+ "absent (facultatif)": "missing (optional)",
+ "Installation sous Debian / Ubuntu :": "Installation on Debian / Ubuntu:"
 }

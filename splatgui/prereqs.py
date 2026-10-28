@@ -11,6 +11,9 @@
 - gnuplot (graphes point à point) : distribution Windows officielle (64 bits,
   SHA-256 vérifié) extraite dans gnuplot/, dont le dossier bin/ est ajouté au PATH d'exécution
   des deux architectures (gnuplot est lancé comme processus séparé par SPLAT!).
+
+Sous Linux, SPLAT!, srtm2sdf et gnuplot viennent des paquets de la distribution : ils sont
+seulement recherchés dans le PATH (rien n'est téléchargé).
 """
 
 import hashlib
@@ -25,6 +28,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+from . import system
 from .storage import BIN_DIR, PROJECT_DIR
 from .i18n import tr
 
@@ -54,6 +58,8 @@ DLL_PACKAGES = {
 }
 
 SPLAT_NAMES = {"splat.exe", "splat-hd.exe"}
+SPLAT_PROGRAMS = ("splat", "splat-hd")
+LINUX_PROGRAMS = (*SPLAT_PROGRAMS, "srtm2sdf")           # paquet Debian / Ubuntu « splat »
 PE_MACHINES = {0x8664: "x64", 0x14C: "x86"}
 
 
@@ -155,7 +161,16 @@ def missing_dlls(arch, extra_paths=""):
 
 def check(extra_paths):
     """État des dépendances par architecture :
-    {arch: {"splat": [...], "missing": [...], "gnuplot": chemin de gnuplot.exe ou None}}."""
+    {arch: {"splat": [...], "missing": [...], "gnuplot": chemin de gnuplot.exe ou None}}.
+    Sous Linux, une seule entrée (« x64 », voir system.py) ; « missing » liste les outils absents."""
+    if not system.WINDOWS:
+        extra = extra_paths.get("x64", "")
+        # splat / splat-hd : cherchés comme au lancement (splat.executable_path), dans le PATH seul.
+        found = {name: system.find_program(name, "" if name in SPLAT_PROGRAMS else extra) for name in LINUX_PROGRAMS}
+        return {"x64": {"splat": sorted(name for name in SPLAT_PROGRAMS if found[name]),
+                        "missing": [name for name, path in found.items() if path is None and name not in SPLAT_PROGRAMS],
+                        "gnuplot": find_gnuplot(extra),
+                        "paths": found}}
     report = {}
     for arch in PE_MACHINES.values():
         names = {p.name.lower() for p in installed_executables(arch)}
@@ -173,6 +188,14 @@ def gnuplot_missing(report):
 def summary(report):
     """(tout est présent ?, message court) d'après `check`."""
     installed = [arch for arch, state in report.items() if state["splat"]]
+    if not system.WINDOWS:
+        state = report["x64"]
+        if not state["splat"] or state["missing"]:
+            absent = [name for name in LINUX_PROGRAMS if state["paths"][name] is None]
+            return False, tr("Absent(s) : {programs} ({command})", programs=", ".join(absent),
+                             command=system.INSTALL_COMMAND)
+        note = tr(" ; gnuplot absent (graphes gnuplot facultatifs)") if not state["gnuplot"] else ""
+        return True, tr("Dépendances présentes (SPLAT! {arches})", arches=", ".join(state["splat"])) + note
     if not installed:
         return False, tr("SPLAT! absent (ni x64 ni x86)")
     problems = [tr("{n} DLL {arch} manquante(s)", n=len(state["missing"]), arch=arch)
@@ -185,6 +208,8 @@ def summary(report):
 
 
 def installed_executables(arch):
+    if not system.WINDOWS:
+        return []
     folder = BIN_DIR / arch
     return [p for p in (*folder.glob("*.exe"), *(folder / "utils").glob("*.exe")) if p.is_file()]
 
@@ -343,10 +368,10 @@ def install_splat(source, log, cancel=lambda: False):
 def _path_with(extra_paths, folder, first):
     """Chaîne PATH complétée par `folder` (en tête ou en fin) s'il n'y figure pas."""
     folder = str(folder)
-    current = [p for p in extra_paths.split(";") if p.strip()]
+    current = system.split_paths(extra_paths)
     if any(os.path.normcase(os.path.normpath(p)) == os.path.normcase(os.path.normpath(folder)) for p in current):
-        return ";".join(current)
-    return ";".join([folder] + current if first else current + [folder])
+        return system.join_paths(current)
+    return system.join_paths([folder] + current if first else current + [folder])
 
 
 def add_to_path_setting(extra_paths, arch):
@@ -361,11 +386,8 @@ def gnuplot_bin():
 
 
 def find_gnuplot(extra_paths=""):
-    """Chemin de gnuplot.exe tel que SPLAT! le trouvera (`extra_paths` puis le PATH), ou None."""
-    for folder in (extra_paths + os.pathsep + os.environ.get("PATH", "")).split(os.pathsep):
-        if folder.strip() and (Path(folder.strip()) / "gnuplot.exe").is_file():
-            return Path(folder.strip()) / "gnuplot.exe"
-    return None
+    """Chemin de gnuplot tel que SPLAT! le trouvera (`extra_paths` puis le PATH), ou None."""
+    return system.find_program("gnuplot", extra_paths)
 
 
 def add_gnuplot_to_path_setting(extra_paths):
@@ -376,6 +398,8 @@ def add_gnuplot_to_path_setting(extra_paths):
 def add_installed_to_path(extra_paths):
     """Complète `extra_paths` ({arch: PATH}) par les DLL de deps/<arch> et par gnuplot/bin
     s'ils sont installés (fenêtre Pré-requis ou installeur)."""
+    if not system.WINDOWS:
+        return
     for arch in PE_MACHINES.values():
         if any(dll_dir(arch).glob("*.dll")):
             extra_paths[arch] = add_to_path_setting(extra_paths.get(arch, ""), arch)

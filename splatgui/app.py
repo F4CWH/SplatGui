@@ -27,7 +27,7 @@ from PyQt6.QtWidgets import (
 
 from . import (
     CREDITS, LICENSE_SHORT, SOURCE_URL, __version__, antenna_ui, antennas, basemap, cables, coverpal, coverpal_ui, dem, demimport, dted, googleearth, help, hillshade, i18n, layers, layout, linkprofile, livemap, mappicker, palettes, panorama, prereqs,
-    sites, splat, storage, terrain, themes,
+    sites, splat, storage, system, terrain, themes,
 )
 from .widgets import FileList, HorizontalScroll, ImageView, PathEdit, SliderValue, graduate
 from .i18n import N_, tr
@@ -623,14 +623,7 @@ class SettingsDialog(QDialog):
         self.settings = settings
         self.paths = {}
         form = QFormLayout()
-        info = QLabel(
-            tr("Dossiers ajoutés au PATH lors de l'exécution (séparés par « ; »). Ils doivent "
-            "contenir les DLL requises par chaque version et, pour les graphes, gnuplot.exe.\n"
-            "x64 : msys-2.0.dll, msys-stdc++-6.dll, msys-gcc_s-seh-1.dll (MSYS2, C:\\msys64\\usr\\bin) "
-            "+ gnuplot (C:\\msys64\\mingw64\\bin).\n"
-            "x86 : libstdc++-6.dll, libgcc_s_dw2-1.dll, libbz2-2.dll (MinGW 32 bits).\n"
-            "Fichier → Pré-requis… télécharge ces DLL dans deps\\<arch>, ainsi que gnuplot, "
-            "et ajoute leurs dossiers ici."))
+        info = QLabel(self._path_help())
         info.setWordWrap(True)
         form.addRow(info)
         for arch in splat.ARCHES:
@@ -643,7 +636,7 @@ class SettingsDialog(QDialog):
             row.addWidget(edit, 1)
             row.addWidget(add)
             row.addWidget(test)
-            form.addRow(f"PATH {arch}", row)
+            form.addRow(f"PATH {arch}" if system.WINDOWS else "PATH", row)
             self.paths[arch] = edit
         self.runs_dir = PathEdit(directory=True)
         self.runs_dir.setText(settings["runs_dir"])
@@ -669,11 +662,25 @@ class SettingsDialog(QDialog):
         layout.addLayout(form)
         layout.addWidget(buttons)
 
+    @staticmethod
+    def _path_help():
+        if not system.WINDOWS:
+            return tr("Dossiers ajoutés au PATH lors de l'exécution (séparés par « : »), par exemple pour un "
+                      "gnuplot installé hors des dossiers standard. SPLAT! et srtm2sdf viennent du paquet "
+                      "splat de la distribution : {command}", command=system.INSTALL_COMMAND)
+        return (
+            tr("Dossiers ajoutés au PATH lors de l'exécution (séparés par « ; »). Ils doivent "
+            "contenir les DLL requises par chaque version et, pour les graphes, gnuplot.exe.\n"
+            "x64 : msys-2.0.dll, msys-stdc++-6.dll, msys-gcc_s-seh-1.dll (MSYS2, C:\\msys64\\usr\\bin) "
+            "+ gnuplot (C:\\msys64\\mingw64\\bin).\n"
+            "x86 : libstdc++-6.dll, libgcc_s_dw2-1.dll, libbz2-2.dll (MinGW 32 bits).\n"
+            "Fichier → Pré-requis… télécharge ces DLL dans deps\\<arch>, ainsi que gnuplot, "
+            "et ajoute leurs dossiers ici."))
+
     def _append_dir(self, edit):
         path = QFileDialog.getExistingDirectory(self, tr("Ajouter un dossier au PATH"))
         if path:
-            current = [p for p in edit.text().split(";") if p.strip()]
-            edit.setText(";".join(current + [str(Path(path))]))
+            edit.setText(system.join_paths(system.split_paths(edit.text()) + [str(Path(path))]))
 
     def _test(self, arch, extra):
         messages = []
@@ -684,8 +691,7 @@ class SettingsDialog(QDialog):
                 continue
             proc = QProcess(self)
             env = QProcessEnvironment.systemEnvironment()
-            if extra.strip():
-                env.insert("PATH", extra.strip().rstrip(";") + os.pathsep + env.value("PATH"))
+            env.insert("PATH", system.prepend_path(extra, env.value("PATH")))
             proc.setProcessEnvironment(env)
             proc.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
             proc.start(str(exe), [])
@@ -696,8 +702,12 @@ class SettingsDialog(QDialog):
             else:
                 why = splat.describe_exit_code(proc.exitCode()) or tr("code {code:#x}", code=proc.exitCode())
                 messages.append(tr("{exe} : ÉCHEC – {why}", exe=exe.name, why=why))
-        gnuplot = any((Path(p.strip()) / "gnuplot.exe").exists() for p in extra.split(";") if p.strip())
-        messages.append("gnuplot.exe : " + (tr("trouvé") if gnuplot else tr("non trouvé dans ces dossiers")))
+        if system.WINDOWS:
+            gnuplot = any((Path(p) / "gnuplot.exe").exists() for p in system.split_paths(extra))
+            messages.append("gnuplot.exe : " + (tr("trouvé") if gnuplot else tr("non trouvé dans ces dossiers")))
+        else:
+            gnuplot = prereqs.find_gnuplot(extra)
+            messages.append("gnuplot : " + (str(gnuplot) if gnuplot else tr("absent")))
         QMessageBox.information(self, tr("Test {arch}", arch=arch), "\n".join(messages))
 
     def values(self):
@@ -1003,7 +1013,7 @@ class MainWindow(QMainWindow):
         self.arch_combo = QComboBox()
         for key, label in splat.ARCHES.items():
             self.arch_combo.addItem(tr(label), key)
-        bar.addWidget(self.arch_combo)
+        bar.addWidget(self.arch_combo).setVisible(len(splat.ARCHES) > 1)
         self.variant_combo = QComboBox()
         for key, label in splat.VARIANTS.items():
             self.variant_combo.addItem(tr(label), key)
@@ -1063,7 +1073,8 @@ class MainWindow(QMainWindow):
         file_menu.addAction(tr("Palettes de couleurs…"), self.manage_coverage_palettes)
         file_menu.addAction(tr("Réglages…"), self.edit_settings)
         file_menu.addAction(tr("Autres données d'entrée…"), self.show_input_dialog)
-        file_menu.addAction(tr("Pré-requis (SPLAT!, DLL, gnuplot)…"), self.manage_prereqs)
+        file_menu.addAction(tr("Pré-requis (SPLAT!, DLL, gnuplot)…") if system.WINDOWS
+                            else tr("Pré-requis (SPLAT!, gnuplot)…"), self.manage_prereqs)
         file_menu.addSeparator()
         file_menu.addAction(tr("Quitter"), self.close)
 
@@ -2760,11 +2771,10 @@ class MainWindow(QMainWindow):
 
     def _start_splat(self):
         exe, args, env = self.run_spec
-        if self.run_params["variant"] == "hd":
-            # Noms de tuiles attendus par splat-hd.exe (voir terrain.hd_alias).
-            for folder in (self.run_dir, splat.effective_sdf_dir(self.run_params)):
-                for error in terrain.link_hd_aliases(folder) if folder else []:
-                    self._console_write(tr("Alias de tuile HD impossible : {error}\n", error=error))
+        # Noms de tuiles attendus par SPLAT! (voir terrain.tile_alias).
+        for folder in (self.run_dir, splat.effective_sdf_dir(self.run_params)):
+            for error in terrain.link_tile_aliases(folder, self.run_params["variant"] == "hd") if folder else []:
+                self._console_write(tr("Alias de tuile impossible : {error}\n", error=error))
         self.splat_output = ""
         self._progress_label = tr("Relance de SPLAT!") if self.terrain_retried else "SPLAT!"
         self._set_progress(None if self.run_params["mode"] == "p2p" else 0.0,
@@ -2779,8 +2789,9 @@ class MainWindow(QMainWindow):
         self.process.readyReadStandardOutput.connect(self._read_output)
         self.process.finished.connect(self._finished)
         self.process.errorOccurred.connect(self._process_error)
-        self.statusBar().showMessage(tr("Exécution de {exe} ({arch})…", exe=exe.name, arch=self.run_params["arch"]))
-        self.process.start(str(exe), args)
+        self.statusBar().showMessage(tr("Exécution de {exe} ({arch})…", exe=exe.name,
+                                        arch=self.run_params["arch"] if system.WINDOWS else "Linux"))
+        self.process.start(*splat.launch_command(exe, args))
         if self.process is None:          # échec du démarrage, déjà traité par _process_error
             return
         self.process.closeWriteChannel()
@@ -2824,15 +2835,22 @@ class MainWindow(QMainWindow):
         if problem:
             arch = self.run_params["arch"]
             result = (N_("échec : {problem}"), {"problem": problem})
-            if not failed_start:
+            if not failed_start and not system.WINDOWS:
+                self._console_write(tr(
+                    "\n*** SPLAT! n'a pas pu démarrer : {problem}.\n"
+                    "Installez le paquet splat ({command}) ou vérifiez le PATH "
+                    "(menu Fichier > Pré-requis…, ou Réglages…, bouton « Tester »).\n",
+                    problem=tr(problem), command=system.INSTALL_COMMAND))
+            elif not failed_start:
                 self._console_write(tr(
                     "\n*** SPLAT! n'a pas pu démarrer : {problem}.\n"
                     "Ajoutez le dossier contenant les DLL requises au PATH de la version {arch} "
                     "(menu Fichier > Pré-requis…, ou Réglages…, bouton « Tester »).\n", problem=tr(problem), arch=arch))
-        elif status == QProcess.ExitStatus.CrashExit:
-            result = ((N_("interrompu"), {}) if code in (-1, 0, 1, 62097)
+        elif status == QProcess.ExitStatus.CrashExit and not splat.crash_signal(code, crashed=True):
+            # Arrêt demandé : -1, 0, 1 ou 62097 sous Windows, SIGKILL (9) sous Linux.
+            result = ((N_("interrompu"), {}) if code in (-1, 0, 1, 62097) or (code == 9 and not system.WINDOWS)
                       else (N_("plantage ({code:#x})"), {"code": code}))
-        elif signal := splat.crash_signal(code):
+        elif signal := splat.crash_signal(code, status == QProcess.ExitStatus.CrashExit):
             result = (N_("plantage de SPLAT! ({signal})"), {"signal": signal})
             self._console_write(tr(
                 "\n*** {result}. Les fichiers produits avant l'arrêt sont conservés "
@@ -2896,7 +2914,7 @@ class MainWindow(QMainWindow):
     def _finalize(self, result, switch_tab=True):
         for path in self.site_tiles:             # copies de tuiles (sursol) : inutiles après le calcul
             Path(path).unlink(missing_ok=True)
-            terrain.hd_alias(path).unlink(missing_ok=True)
+            terrain.tile_alias(path).unlink(missing_ok=True)
         self.site_tiles = []
         self._update_disk_usage()                # relief éventuellement téléchargé et converti
         if self.run_params and self.run_params["map_aspect_file"] and self.run_dir:
@@ -4592,9 +4610,23 @@ class MainWindow(QMainWindow):
         if self._busy():
             QMessageBox.information(self, tr("Pré-requis"), tr("Attendez la fin de l'exécution en cours."))
             return
-        PrereqDialog(self.settings, self).exec()
+        if system.WINDOWS:
+            PrereqDialog(self.settings, self).exec()
+        else:
+            self._linux_prereqs(tr("Pré-requis"))
         self._show_prereq_status(prereqs.check(self.settings["extra_paths"]))
         self._refresh_state()
+
+    def _linux_prereqs(self, title):
+        """Linux : état des paquets (rien n'est téléchargé par l'application)."""
+        state = prereqs.check(self.settings["extra_paths"])["x64"]
+        lines = [f"{name} : {path or tr('absent')}" for name, path in state["paths"].items()]
+        lines.append(f"gnuplot : {state['gnuplot'] or tr('absent (facultatif)')}")
+        text = ("\n".join(lines) + "\n\n" + tr("Installation sous Debian / Ubuntu :")
+                + f"\n{system.INSTALL_COMMAND}")
+        box = QMessageBox(QMessageBox.Icon.Information, title, text, parent=self)
+        box.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        box.exec()
 
     def _show_prereq_status(self, report):
         """Indicateur permanent de la barre d'état, visible tant qu'une dépendance manque."""
@@ -4611,6 +4643,9 @@ class MainWindow(QMainWindow):
             self.settings["prereqs_offered"] = True
             storage.save_settings(self.settings)
         if prereqs.summary(report)[0] or not first:
+            return
+        if not system.WINDOWS:
+            self._linux_prereqs(tr("Premier démarrage"))
             return
         lines = ["• " + tr("DLL {arch} manquantes : {dlls}", arch=arch, dlls=", ".join(state["missing"]))
                  for arch, state in report.items() if state["splat"] and state["missing"]]
@@ -4793,8 +4828,9 @@ def ensure_directories(settings):
     folders = [storage.PROFILES_DIR, *(folder_setting(settings, key) for key in storage.FOLDER_SETTINGS),
                antennas.LIBRARY_DIR,
                terrain.SRTM_DIR, terrain.SDF_DIR, basemap.TILES_DIR]
-    for arch in splat.ARCHES:
-        folders += [storage.BIN_DIR / arch / "utils", prereqs.dll_dir(arch), splat.TOOLS_DIR / arch]
+    if system.WINDOWS:
+        for arch in splat.ARCHES:
+            folders += [storage.BIN_DIR / arch / "utils", prereqs.dll_dir(arch), splat.TOOLS_DIR / arch]
     created, failed = [], []
     for folder in folders:
         if folder.is_dir():
@@ -4816,9 +4852,11 @@ def license_file():
 
 
 def app_icon():
-    """Icône de l'application : icons/ à côté de l'exécutable, sinon la copie intégrée à lib/."""
+    """Icône de l'application : icons/ à côté de l'exécutable, sinon la copie intégrée à lib/
+    (.ico sous Windows, .png sous Linux)."""
+    name = "splat_icon.ico" if system.WINDOWS else "splat_icon.png"
     for folder in (storage.PROJECT_DIR, Path(getattr(sys, "_MEIPASS", storage.PROJECT_DIR))):
-        path = folder / "icons" / "splat_icon.ico"
+        path = folder / "icons" / name
         if path.exists():
             return QIcon(str(path))
     return QIcon()
@@ -4836,6 +4874,8 @@ def main():
     app.setApplicationName("SPLAT!Gui")
     app.setStyle("Fusion")
     app.setWindowIcon(app_icon())
+    if not system.WINDOWS:
+        app.setDesktopFileName("splatgui")      # lanceur splatgui.desktop (installer/linux/install.sh)
     settings = storage.load_settings()
     if storage.apply_install_paths(settings):
         # DLL et gnuplot éventuellement installés par l'assistant : ajoutés au PATH d'exécution.

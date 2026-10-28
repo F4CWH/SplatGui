@@ -81,7 +81,7 @@ Avec l'installeur de SPLAT!Gui seul, la fenêtre **Fichier → Pré-requis (SPLA
 
 ## Utilisation depuis les sources
 
-Prérequis : Windows, **Python 3.14** ou plus récent (le téléchargement des DLL x64 utilise la décompression zstd intégrée à Python 3.14).
+Prérequis sous Windows : **Python 3.14** ou plus récent (le téléchargement des DLL x64 utilise la décompression zstd intégrée à Python 3.14).
 
 ```powershell
 python -m venv .venv
@@ -89,7 +89,29 @@ python -m venv .venv
 .venv\Scripts\python main.py
 ```
 
+### Linux (Debian, Ubuntu)
+
+SPLAT!, `srtm2sdf` et gnuplot viennent des paquets de la distribution. Rien n'est téléchargé par l'application : la fenêtre **Fichier → Pré-requis (SPLAT!, gnuplot)…** indique seulement ce qui est trouvé dans le PATH. Le choix x64 / x86 disparaît (une seule version, celle du paquet).
+
+```sh
+sudo apt install splat gnuplot python3-venv libxcb-cursor0
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python main.py
+```
+
+Python 3.11 ou plus récent suffit sous Linux (Python 3.14 n'est requis que pour télécharger les DLL Windows). Différences avec Windows :
+
+- SPLAT! est lancé avec une pile de 256 Mo (`ulimit -s`, ou le maximum autorisé par le système) pour éviter un plantage pendant l'analyse point à point ;
+- le SPLAT! d'origine cherche les tuiles sous le nom `48:49:357:358.sdf` : l'application crée ces noms par lien physique à côté des fichiers `48_49_357_358.sdf` ;
+- chaque calcul contient un script `commande.sh` (au lieu de `commande.cmd`) qui relance SPLAT! avec les mêmes paramètres ;
+- les données (profils, réglages, relief, résultats) restent dans le dossier de l'application, qui doit donc être accessible en écriture.
+
 ## Compilation
+
+Le même fichier `SplatGui.spec` sert sous Windows et sous Linux.
+
+### Windows
 
 L'exécutable est produit par [PyInstaller](https://pyinstaller.org) et l'installeur par [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`).
 
@@ -108,6 +130,24 @@ Le script produit :
 
 La version est lue dans `splatgui/__init__.py`. L'option `-SkipPyInstaller` reconstruit seulement l'installeur.
 
+### Linux
+
+Compiler sur la distribution la plus ancienne visée : l'exécutable dépend de la version de la glibc du système de compilation (une compilation sous Debian 12 ou Ubuntu 22.04 fonctionne aussi sur les versions suivantes).
+
+```sh
+sudo apt install python3-venv binutils
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt pyinstaller
+sh installer/build_linux.sh
+```
+
+Le script produit :
+
+- `dist/SPLAT!Gui/` : l'application, avec l'exécutable `splatgui` et ses bibliothèques dans `lib/` ;
+- `dist/SPLAT!Gui-<version>-linux-<arch>.tar.gz` : l'archive à distribuer.
+
+L'option `--skip-pyinstaller` reconstruit seulement l'archive. Pour installer, décompresser l'archive puis lancer `./install.sh` : l'application est copiée dans `~/.local/share/splatgui` (sans droits administrateur, données comprises), avec une entrée dans le menu des applications et un lien `~/.local/bin/splatgui`. Une mise à jour garde les données ; `./install.sh --uninstall` retire l'application et laisse les données. Le script indique les paquets manquants (`splat`, `gnuplot`, `libxcb-cursor0`).
+
 ## Organisation des fichiers
 
 Les données sont enregistrées à côté de l'exécutable (ou de `main.py`). Les chemins internes à ce dossier sont mémorisés en relatif : l'application peut être déplacée.
@@ -119,7 +159,7 @@ Les données sont enregistrées à côté de l'exécutable (ou de `main.py`). Le
 | `terrain\srtm`, `terrain\sdf`, `terrain\tiles` | tuiles SRTM, fichiers SDF, cache des fonds de carte |
 | `terrain\copernicus`, `terrain\ign`, `terrain\worldcover` | relief Copernicus et IGN, occupation du sol (grilles compressées) |
 | `terrain\sdf-<source>[-sursol-…]` | fichiers SDF de chaque configuration de relief (source, hauteurs du sursol) |
-| `runs` | un dossier par calcul (fichiers d'entrée, rapports, cartes, `commande.cmd`) |
+| `runs` | un dossier par calcul (fichiers d'entrée, rapports, cartes, `commande.cmd` ou `commande.sh`) |
 | `qth`, `lrp` | sites et paramètres ITM importés / exportés |
 | `profiles`, `antennas` | profils et bibliothèque d'antennes |
 | `geojson` | contours affichables en calques (communes, départements, régions) |

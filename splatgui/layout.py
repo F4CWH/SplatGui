@@ -9,6 +9,7 @@ La légende est construite à partir de ce que la carte contient réellement :
 
 import math
 import re
+import shlex
 from pathlib import Path
 
 import numpy as np
@@ -32,7 +33,16 @@ PATH_COLORS = [GREEN, CYAN, VIOLET, SIENNA]
 # --- Lecture de l'exécution -------------------------------------------------------
 
 def run_arguments(run_dir):
-    """Arguments SPLAT! de l'exécution, relus dans commande.cmd."""
+    """Arguments SPLAT! de l'exécution, relus dans commande.cmd (Windows) ou commande.sh (Linux)."""
+    script = Path(run_dir) / "commande.sh"
+    if script.exists():
+        for line in script.read_text(encoding="utf-8", errors="replace").splitlines():
+            if line.startswith("exec "):
+                try:
+                    return shlex.split(line)[2:]        # sans « exec » ni l'exécutable
+                except ValueError:
+                    return []
+        return []
     cmd = Path(run_dir) / "commande.cmd"
     if not cmd.exists():
         return []

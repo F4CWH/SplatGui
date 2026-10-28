@@ -23,6 +23,9 @@
 # Jupyter notebook
 *.ipynb  text eol=lf
 
+# Scripts shell (compilation et installation Linux) : toujours en LF
+*.sh     text eol=lf
+
 # Note: .db, .p, and .pkl files are associated
 # with the python modules ``pickle``, ``dbm.*``,
 # ``shelve``, ``marshal``, ``anydbm``, & ``bsddb``
